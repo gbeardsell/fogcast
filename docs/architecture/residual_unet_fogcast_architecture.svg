@@ -1,0 +1,925 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="1460"
+   height="1150"
+   viewBox="0 0 1460 1150"
+   role="img"
+   aria-labelledby="title description"
+   version="1.1"
+   id="svg85"
+   sodipodi:docname="residual_unet_fogcast_architecture.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview85"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="1.0547826"
+     inkscape:cx="729.53421"
+     inkscape:cy="575"
+     inkscape:window-width="2560"
+     inkscape:window-height="1494"
+     inkscape:window-x="-11"
+     inkscape:window-y="-11"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg85" />
+  <title
+     id="title">Fogcast baseline A architecture: observation and forecast fusion in a residual U-Net</title>
+  <desc
+     id="description">Tensors use batch, channel, height, width order. The five-channel fine input at 400 by 400 combines current GOES B2-derived clear score and validity, land fraction, elevation and current solar cosine. Encoder 0 produces 16 channels at 400 by 400, encoder 1 produces 32 channels at 200 by 200, and encoder 2 produces 32 channels at 100 by 100. At this two-kilometre level, concatenate 25 conditioning channels: current GOES CSM clear class and validity, eleven NBM sky-cover forecasts valid from issuance through ten hours ahead, ten future solar cosines, and two seasonal sine/cosine fields. Fusion maps the resulting 57 channels to 64. Skip 2 branches after this fusion. Encoder 3 produces 128 channels at 50 by 50; the bottleneck produces 256 at 25 by 25. Each decoder step first bilinearly resizes by two, then concatenates the corresponding encoder skip, then applies a residual block. Decoder 3 receives 384 channels and returns 128 at 50 by 50; decoder 2 receives 192 and returns 64 at 100 by 100; decoder 1 receives 96 and returns 32 at 200 by 200; decoder 0 receives 48 and returns 16 at 400 by 400. A one-by-one convolution gives ten logits; sigmoid gives ten hourly clear-sky probability maps at 500 metres for one through ten hours ahead, all in one forward pass.</desc>
+  <defs
+     id="defs2">
+    <marker
+       id="arrow"
+       markerWidth="9"
+       markerHeight="9"
+       refX="8"
+       refY="4.5"
+       orient="auto"
+       markerUnits="userSpaceOnUse">
+      <path
+         d="M 0 0 L 9 4.5 L 0 9 Z"
+         fill="#32627b"
+         id="path1" />
+    </marker>
+    <marker
+       id="skip-arrow"
+       markerWidth="9"
+       markerHeight="9"
+       refX="8"
+       refY="4.5"
+       orient="auto"
+       markerUnits="userSpaceOnUse">
+      <path
+         d="M 0 0 L 9 4.5 L 0 9 Z"
+         fill="#5a8ca4"
+         id="path2" />
+    </marker>
+    <style
+       id="style2">
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; fill: #17354a; }
+      .heading { font-size: 32px; font-weight: 700; letter-spacing: -.4px; }
+      .subtitle { font-size: 21px; fill: #52697b; }
+      .section { font-size: 16px; font-weight: 700; letter-spacing: 1.6px; fill: #60788a; }
+      .card-title { font-size: 23px; font-weight: 650; }
+      .body { font-size: 20px; }
+      .detail { font-size: 18px; fill: #52697b; }
+      .tensor { font-size: 21px; font-variant-numeric: tabular-nums; }
+      .block { fill: #195f7b; stroke: #17465c; stroke-width: 1.7; }
+      .block-title { fill: #ffffff; font-size: 24px; font-weight: 600; text-anchor: middle; }
+      .block-tensor { fill: #e2eff5; font-size: 21px; font-variant-numeric: tabular-nums; text-anchor: middle; }
+      .concat { fill: #edf5f9; stroke: #a4c3d3; stroke-width: 1.5; }
+      .resize { fill: #ffffff; stroke: #b9cbd6; stroke-width: 1.5; }
+      .flow { fill: none; stroke: #32627b; stroke-width: 2.3; stroke-linejoin: round; marker-end: url(#arrow); }
+      .skip { fill: none; stroke: #5a8ca4; stroke-width: 2.3; stroke-dasharray: 7 5; marker-end: url(#skip-arrow); }
+      .skip-label { font-size: 18px; fill: #4a758b; text-anchor: middle; }
+    </style>
+  </defs>
+  <rect
+     width="1460"
+     height="1150"
+     rx="18"
+     fill="#ffffff"
+     id="rect2" />
+  <rect
+     x=".75"
+     y=".75"
+     width="1458.5"
+     height="1148.5"
+     rx="17"
+     fill="none"
+     stroke="#dce5eb"
+     stroke-width="1.5"
+     id="rect3" />
+  <text
+     x="32"
+     y="49"
+     class="heading"
+     id="text3">Fogcast architecture</text>
+  <text
+     x="32"
+     y="85"
+     class="subtitle"
+     id="text4">Baseline Model A · Residual 2D U-Net · ten forecast hours in one forward pass</text>
+  <path
+     d="M 32 107 H 1428"
+     stroke="#e2e9ef"
+     id="path4" />
+  <text
+     x="32"
+     y="165"
+     class="section"
+     id="text5" />
+  <text
+     x="420"
+     y="213"
+     class="section"
+     id="text6">ENCODER</text>
+  <text
+     x="850"
+     y="213"
+     class="section"
+     id="text7">SKIP CONCATENATION</text>
+  <text
+     x="1130"
+     y="233"
+     class="section"
+     id="text8">DECODER</text>
+  <!-- Source fields: x_fine has 5 channels, x_cond has 25. -->
+  <g
+     id="fine-input"
+     data-shape="B,5,400,400">
+    <rect
+       x="32"
+       y="239"
+       width="340"
+       height="305"
+       rx="12"
+       fill="#f0f7fc"
+       stroke="#b6d1e1"
+       stroke-width="1.5"
+       id="rect8" />
+    <rect
+       x="32"
+       y="259"
+       width="4"
+       height="265"
+       rx="2"
+       fill="#438bab"
+       id="rect9" />
+    <text
+       x="52"
+       y="273"
+       class="card-title"
+       id="text9">Fine inputs · 500 m</text>
+    <text
+       x="52"
+       y="309"
+       class="tensor"
+       id="text10"
+       style="font-size:21px;font-family:'-apple-system', BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;font-variant-numeric:tabular-nums;fill:#17354a">x<tspan
+   font-size="15"
+   baseline-shift="sub"
+   id="tspan87">fine</tspan>: [B, 5, 400, 400]</text>
+    <path
+       d="M 52 329 H 352"
+       stroke="#cddfeb"
+       id="path10" />
+    <text
+       x="52"
+       y="363"
+       class="body"
+       id="text11"
+       style="font-size:19px">Current GOES B2 clear score · 2</text>
+    <text
+       x="52"
+       y="393"
+       class="detail"
+       id="text12">+ validity mask</text>
+    <text
+       x="52"
+       y="439"
+       class="body"
+       id="text13">Land fraction + elevation · 2</text>
+    <text
+       x="52"
+       y="483"
+       class="body"
+       id="text14"
+       style="font-size:18px">Current solar incidence factor · 1</text>
+    <text
+       x="52"
+       y="526"
+       font-size="17"
+       fill="#52697b"
+       id="fine-channel-total">2 + 2 + 1 = 5 channels</text>
+  </g>
+  <g
+     id="conditioning-input"
+     data-shape="B,25,100,100">
+    <rect
+       x="32"
+       y="570"
+       width="340"
+       height="395"
+       rx="12"
+       fill="#fcfaf5"
+       stroke="#decda8"
+       stroke-width="1.5"
+       id="rect14" />
+    <text
+       x="52"
+       y="606"
+       class="card-title"
+       id="text15">Coarse Inputs · 2 km</text>
+    <text
+       x="52"
+       y="643"
+       class="tensor"
+       id="text16">x<tspan font-size="15" baseline-shift="sub">coarse</tspan>: [B, 25, 100, 100]</text>
+    <path
+       d="M 52 662 H 352"
+       stroke="#e6dcc8"
+       id="path16" />
+    <rect
+       x="51"
+       y="683"
+       width="4"
+       height="49"
+       rx="2"
+       fill="#438bab"
+       id="rect16" />
+    <text
+       x="67"
+       y="700"
+       class="body"
+       id="text17">Current GOES CSM · 2</text>
+    <text
+       x="67"
+       y="727"
+       font-size="17"
+       fill="#52697b"
+       id="text18">Clear class + validity · 2 km grid</text>
+    <rect
+       x="51"
+       y="756"
+       width="4"
+       height="49"
+       rx="2"
+       fill="#c18a2d"
+       id="rect18" />
+    <text
+       x="67"
+       y="773"
+       class="body"
+       id="text19">NBM sky-cover forecasts · 11</text>
+    <text
+       x="67"
+       y="800"
+       class="detail"
+       id="text20">Valid at t, t+1, …, t+10 h</text>
+    <rect
+       x="51"
+       y="830"
+       width="4"
+       height="100"
+       rx="2"
+       fill="#94a6b4"
+       id="rect20" />
+    <text
+       x="67"
+       y="843"
+       class="body"
+       id="text21">Future solar incidence <tspan x="67" dy="27">factors · 10</tspan></text>
+    <text
+       x="67"
+       y="914"
+       class="body"
+       id="text22">Seasonality sin / cos · 2</text>
+    <text
+       x="52"
+       y="947"
+       font-size="17"
+       fill="#74694f"
+       id="text23">2 + 11 + 10 + 2 = 25 channels</text>
+  </g>
+  <!-- Encoder. Channel/grid dimensions are outputs of each block. -->
+  <path
+     class="flow"
+     d="M 372 280 H 420"
+     id="path23" />
+  <path
+     class="flow"
+     d="M 550 321 V 399"
+     id="path24" />
+  <path
+     class="flow"
+     d="M 550 481 V 533"
+     id="path25" />
+  <path
+     class="flow"
+     d="M 550 615 V 633"
+     id="path26" />
+  <path
+     class="flow"
+     d="M 372 674 H 420"
+     id="path27" />
+  <path
+     class="flow"
+     d="M 550 715 V 813"
+     id="path28" />
+  <path
+     class="flow"
+     d="M 550 895 V 1014 H 800"
+     id="path29" />
+  <g
+     id="encoder-0"
+     data-shape="B,16,400,400">
+    <rect
+       x="420"
+       y="239"
+       width="260"
+       height="82"
+       rx="11"
+       class="block"
+       id="rect29" />
+    <text
+       x="550"
+       y="272"
+       class="block-title"
+       id="text29">Encoder 0</text>
+    <text
+       x="550"
+       y="304"
+       class="block-tensor"
+       id="text30">[B, 16, 400, 400]</text>
+  </g>
+  <g
+     id="encoder-1"
+     data-shape="B,32,200,200">
+    <rect
+       x="420"
+       y="399"
+       width="260"
+       height="82"
+       rx="11"
+       class="block"
+       id="rect30" />
+    <text
+       x="550"
+       y="432"
+       class="block-title"
+       id="text31">Encoder 1</text>
+    <text
+       x="550"
+       y="464"
+       class="block-tensor"
+       id="text32">[B, 32, 200, 200]</text>
+  </g>
+  <g
+     id="encoder-2-pre-fusion"
+     data-shape="B,32,100,100">
+    <rect
+       x="420"
+       y="533"
+       width="260"
+       height="82"
+       rx="11"
+       class="block"
+       id="rect32" />
+    <text
+       x="550"
+       y="566"
+       class="block-title"
+       id="text33">Encoder 2</text>
+    <text
+       x="550"
+       y="598"
+       class="block-tensor"
+       id="text34">[B, 32, 100, 100]</text>
+  </g>
+  <g
+     id="fusion"
+     data-input-channels="57"
+     data-shape="B,64,100,100">
+    <rect
+       x="420"
+       y="633"
+       width="260"
+       height="82"
+       rx="11"
+       fill="#fff1d5"
+       stroke="#caa25a"
+       stroke-width="1.7"
+       id="rect34" />
+    <text
+       x="550"
+       y="658"
+       font-size="22"
+       font-weight="650"
+       text-anchor="middle"
+       fill="#705019"
+       id="text35">Fuse · 32 + 25 → 64</text>
+    <text
+       x="550"
+       y="682"
+       font-size="17"
+       text-anchor="middle"
+       fill="#856939"
+       id="text36">Concat → residual block</text>
+    <text
+       x="550"
+       y="707"
+       class="tensor"
+       text-anchor="middle"
+       fill="#705019"
+       id="text37">[B, 64, 100, 100]</text>
+  </g>
+  <g
+     id="encoder-3"
+     data-shape="B,128,50,50">
+    <rect
+       x="420"
+       y="813"
+       width="260"
+       height="82"
+       rx="11"
+       class="block"
+       id="rect37" />
+    <text
+       x="550"
+       y="846"
+       class="block-title"
+       id="text38">Encoder 3</text>
+    <text
+       x="550"
+       y="878"
+       class="block-tensor"
+       id="text39">[B, 128, 50, 50]</text>
+  </g>
+  <text
+     x="566"
+     y="365"
+     class="detail"
+     id="text40">stride 2</text>
+  <text
+     x="566"
+     y="513"
+     class="detail"
+     id="text41">stride 2</text>
+  <text
+     x="566"
+     y="769"
+     class="detail"
+     id="text42">stride 2</text>
+  <text
+     x="566"
+     y="956"
+     class="detail"
+     id="text43">stride 2</text>
+  <g
+     id="bottleneck"
+     data-shape="B,256,25,25">
+    <rect
+       x="800"
+       y="972"
+       width="270"
+       height="84"
+       rx="11"
+       fill="#15465c"
+       stroke="#123b4f"
+       stroke-width="1.7"
+       id="rect43" />
+    <text
+       x="935"
+       y="1006"
+       class="block-title"
+       id="text44">Bottleneck</text>
+    <text
+       x="935"
+       y="1038"
+       class="block-tensor"
+       id="text45">[B, 256, 25, 25]</text>
+  </g>
+  <!-- All skips originate at block outputs; Skip 2 is AFTER fusion. -->
+  <path
+     id="skip-0"
+     class="skip"
+     data-from="encoder-0"
+     data-to="concat-0"
+     d="M 680 280 H 850" />
+  <path
+     id="skip-1"
+     class="skip"
+     data-from="encoder-1"
+     data-to="concat-1"
+     d="M 680 440 H 850" />
+  <path
+     id="skip-2"
+     class="skip"
+     data-from="fusion"
+     data-to="concat-2"
+     d="M 680 674 H 850" />
+  <path
+     id="skip-3"
+     class="skip"
+     data-from="encoder-3"
+     data-to="concat-3"
+     d="M 680 854 H 850" />
+  <text
+     x="765"
+     y="267"
+     class="skip-label"
+     id="text46">Skip 0 · 16 ch</text>
+  <text
+     x="765"
+     y="427"
+     class="skip-label"
+     id="text47">Skip 1 · 32 ch</text>
+  <text
+     x="765"
+     y="661"
+     class="skip-label"
+     id="text48">Skip 2 · fused 64</text>
+  <text
+     x="765"
+     y="841"
+     class="skip-label"
+     id="text49">Skip 3 · 128 ch</text>
+  <!-- Decoder flow: resize before concat, then stride-1 residual block. -->
+  <path
+     class="flow"
+     d="M 935 972 V 948"
+     id="path49" />
+  <path
+     class="flow"
+     d="M 935 912 V 886"
+     id="path50" />
+  <path
+     class="flow"
+     d="M 1020 854 H 1130"
+     id="path51" />
+  <path
+     class="flow"
+     d="M 1279 813 V 792 H 935 V 772"
+     id="path52" />
+  <path
+     class="flow"
+     d="M 935 736 V 706"
+     id="path53" />
+  <path
+     class="flow"
+     d="M 1020 674 H 1130"
+     id="path54" />
+  <path
+     class="flow"
+     d="M 1279 633 V 590 H 935 V 556"
+     id="path55" />
+  <path
+     class="flow"
+     d="M 935 520 V 472"
+     id="path56" />
+  <path
+     class="flow"
+     d="M 1020 440 H 1130"
+     id="path57" />
+  <path
+     class="flow"
+     d="M 1279 399 V 390 H 935 V 374"
+     id="path58" />
+  <path
+     class="flow"
+     d="M 935 338 V 312"
+     id="path59" />
+  <path
+     class="flow"
+     d="M 1020 280 H 1130"
+     id="path60" />
+  <path
+     class="flow"
+     d="M 1279 239 V 212"
+     id="path61" />
+  <g
+     id="resize-3"
+     data-mode="bilinear"
+     data-scale="2">
+    <rect
+       x="855"
+       y="912"
+       width="160"
+       height="36"
+       rx="8"
+       class="resize"
+       id="rect61" />
+    <text
+       x="935"
+       y="936"
+       font-size="19"
+       text-anchor="middle"
+       id="text61">2× bilinear</text>
+  </g>
+  <g
+     id="resize-2"
+     data-mode="bilinear"
+     data-scale="2">
+    <rect
+       x="855"
+       y="736"
+       width="160"
+       height="36"
+       rx="8"
+       class="resize"
+       id="rect62" />
+    <text
+       x="935"
+       y="760"
+       font-size="19"
+       text-anchor="middle"
+       id="text62">2× bilinear</text>
+  </g>
+  <g
+     id="resize-1"
+     data-mode="bilinear"
+     data-scale="2">
+    <rect
+       x="855"
+       y="520"
+       width="160"
+       height="36"
+       rx="8"
+       class="resize"
+       id="rect63" />
+    <text
+       x="935"
+       y="544"
+       font-size="19"
+       text-anchor="middle"
+       id="text63">2× bilinear</text>
+  </g>
+  <g
+     id="resize-0"
+     data-mode="bilinear"
+     data-scale="2">
+    <rect
+       x="855"
+       y="338"
+       width="160"
+       height="36"
+       rx="8"
+       class="resize"
+       id="rect64" />
+    <text
+       x="935"
+       y="362"
+       font-size="19"
+       text-anchor="middle"
+       id="text64">2× bilinear</text>
+  </g>
+  <g
+     id="concat-3"
+     data-input-channels="256,128"
+     data-shape="B,384,50,50">
+    <rect
+       x="850"
+       y="822"
+       width="170"
+       height="64"
+       rx="10"
+       class="concat"
+       id="rect65" />
+    <text
+       x="935"
+       y="849"
+       font-size="22"
+       font-weight="600"
+       text-anchor="middle"
+       id="text65">Concat</text>
+    <text
+       x="935"
+       y="874"
+       font-size="18"
+       text-anchor="middle"
+       fill="#52697b"
+       id="text66">256 + 128 = 384</text>
+  </g>
+  <g
+     id="concat-2"
+     data-input-channels="128,64"
+     data-shape="B,192,100,100">
+    <rect
+       x="850"
+       y="642"
+       width="170"
+       height="64"
+       rx="10"
+       class="concat"
+       id="rect66" />
+    <text
+       x="935"
+       y="669"
+       font-size="22"
+       font-weight="600"
+       text-anchor="middle"
+       id="text67">Concat</text>
+    <text
+       x="935"
+       y="694"
+       font-size="19"
+       text-anchor="middle"
+       fill="#52697b"
+       id="text68">128 + 64 = 192</text>
+  </g>
+  <g
+     id="concat-1"
+     data-input-channels="64,32"
+     data-shape="B,96,200,200">
+    <rect
+       x="850"
+       y="408"
+       width="170"
+       height="64"
+       rx="10"
+       class="concat"
+       id="rect68" />
+    <text
+       x="935"
+       y="435"
+       font-size="22"
+       font-weight="600"
+       text-anchor="middle"
+       id="text69">Concat</text>
+    <text
+       x="935"
+       y="460"
+       font-size="19"
+       text-anchor="middle"
+       fill="#52697b"
+       id="text70">64 + 32 = 96</text>
+  </g>
+  <g
+     id="concat-0"
+     data-input-channels="32,16"
+     data-shape="B,48,400,400">
+    <rect
+       x="850"
+       y="248"
+       width="170"
+       height="64"
+       rx="10"
+       class="concat"
+       id="rect70" />
+    <text
+       x="935"
+       y="275"
+       font-size="22"
+       font-weight="600"
+       text-anchor="middle"
+       id="text71">Concat</text>
+    <text
+       x="935"
+       y="300"
+       font-size="19"
+       text-anchor="middle"
+       fill="#52697b"
+       id="text72">32 + 16 = 48</text>
+  </g>
+  <g
+     id="decoder-3"
+     data-shape="B,128,50,50">
+    <rect
+       x="1130"
+       y="813"
+       width="298"
+       height="82"
+       rx="11"
+       class="block"
+       id="rect72" />
+    <text
+       x="1279"
+       y="846"
+       class="block-title"
+       id="text73">Decoder 3</text>
+    <text
+       x="1279"
+       y="878"
+       class="block-tensor"
+       id="text74">[B, 128, 50, 50]</text>
+  </g>
+  <g
+     id="decoder-2"
+     data-shape="B,64,100,100">
+    <rect
+       x="1130"
+       y="633"
+       width="298"
+       height="82"
+       rx="11"
+       class="block"
+       id="rect74" />
+    <text
+       x="1279"
+       y="666"
+       class="block-title"
+       id="text75">Decoder 2</text>
+    <text
+       x="1279"
+       y="698"
+       class="block-tensor"
+       id="text76">[B, 64, 100, 100]</text>
+  </g>
+  <g
+     id="decoder-1"
+     data-shape="B,32,200,200">
+    <rect
+       x="1130"
+       y="399"
+       width="298"
+       height="82"
+       rx="11"
+       class="block"
+       id="rect76" />
+    <text
+       x="1279"
+       y="432"
+       class="block-title"
+       id="text77">Decoder 1</text>
+    <text
+       x="1279"
+       y="464"
+       class="block-tensor"
+       id="text78">[B, 32, 200, 200]</text>
+  </g>
+  <g
+     id="decoder-0"
+     data-shape="B,16,400,400">
+    <rect
+       x="1130"
+       y="239"
+       width="298"
+       height="82"
+       rx="11"
+       class="block"
+       id="rect78" />
+    <text
+       x="1279"
+       y="272"
+       class="block-title"
+       id="text79">Decoder 0</text>
+    <text
+       x="1279"
+       y="304"
+       class="block-tensor"
+       id="text80">[B, 16, 400, 400]</text>
+  </g>
+  <g
+     id="probability-output"
+     data-shape="B,10,400,400">
+    <rect
+       x="1130"
+       y="121"
+       width="298"
+       height="91"
+       rx="11"
+       fill="#e7f4ed"
+       stroke="#99bfab"
+       stroke-width="1.5"
+       id="rect80" />
+    <text
+       x="1279"
+       y="146"
+       font-size="20"
+       font-weight="650"
+       text-anchor="middle"
+       fill="#285d46"
+       id="text81">1×1 conv → sigmoid</text>
+    <text
+       x="1279"
+       y="174"
+       font-size="20"
+       font-weight="650"
+       text-anchor="middle"
+       fill="#285d46"
+       id="text82">P(clear): [B,10,400,400]</text>
+    <text
+       x="1279"
+       y="200"
+       font-size="18"
+       text-anchor="middle"
+       fill="#426b57"
+       id="text83">+1 … +10 h · 500 m</text>
+  </g>
+  <path
+     d="M 32 1081 H 1428"
+     stroke="#e2e9ef"
+     id="path83" />
+  <text
+     x="32"
+     y="1111"
+     font-size="18"
+     fill="#52697b"
+     id="text84">Encoder / decoder blocks are residual. Decoder concatenation follows bilinear upsampling.</text>
+  <text
+     x="32"
+     y="1137"
+     font-size="17"
+     fill="#60788a"
+     id="text85">Tensor order: [B, C, H, W] · t = forecast issuance · solar cosine = cos(solar zenith) · 0 = cloudy, 1 = clear</text>
+  <text
+     xml:space="preserve"
+     style="writing-mode:lr-tb;direction:ltr;fill:#afe9af"
+     x="-65.416321"
+     y="208.57378"
+     id="text86"><tspan
+       sodipodi:role="line"
+       id="tspan85"
+       x="-65.416321"
+       y="208.57378">t</tspan></text>
+</svg>
