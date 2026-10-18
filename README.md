@@ -50,12 +50,20 @@ The model produces ten clear-sky probability maps in a single forward pass, corr
 
 *Figure 1. Baseline Fogcast architecture. Five fine-resolution input channels pass through the encoder and are fused with 25 additional coarse-resolution input channels at the 2 km feature level. These additional channels provide satellite observations, NBM forecasts, and solar/seasonal information.*
 
-4. **Selected technical components**: Links to the implementations and brief explanations of the important design choices.
+## Selected technical components
 
-5. **Results**: Representative predictions compared with observations, persistence, and NBM, with quantitative results where available.
+Links to the implementations and brief explanations of the important design choices.
 
-6. Reproduction: Dependencies and instructions for running the published examples.
+## Results
 
-7. Project status: Active research project; selected components released.
+Representative predictions compared with observations, persistence, and NBM, with quantitative results where available.
+
+## Reproduction
+
+Dependencies and instructions for running the published examples.
+
+## Project status
+
+Active research project; selected components released.
 
 Also insert links to the Fogcast blog posts.
