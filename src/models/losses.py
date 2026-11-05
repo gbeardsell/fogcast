@@ -102,73 +102,84 @@ def _segment_logsumexp(values: Tensor, rows: Tensor, nrows: int) -> Tensor:
     ``rows`` assigns each one-dimensional value to a row in ``[0, nrows)``.
     Callers supply at least one finite contribution per row. A detached row
     maximum is only a numerical shift, so tied maxima do not alter gradients.
+
+    values: [number_of_selected_maps, number_of_overlap_entries]
+    rows: [number_of_overlap_entries]
+    output: [number_of_selected_maps, nrows]
     """
     # Compute log(sum(exp(values))) separately for each native footprint.
     # Subtracting its maximum prevents overflow in the exponential.
     # Detach the stabilizing maximum to preserve  logsumexp's exact derivative.
-    maxima = values.new_full((nrows,), -torch.inf)
+    maxima = values.new_full((*values.shape[:-1], nrows), -torch.inf) # [:-1] means keep everything except the last dimension. The * unpacks the remaining shape size from (3,) to 3.
 
     # the trailing _ in scatter_reduce_ means the operation modifies the tensor in place. 
     # This is a common Pytorch naming convention.
-    maxima.scatter_reduce_(0, rows, values.detach(), reduce="amax", include_self=True)
-    sums = values.new_zeros(nrows).index_add(0, rows, torch.exp(values - maxima[rows]))
+    indices = rows.expand_as(values)
+    maxima.scatter_reduce_(-1, indices, values.detach(), reduce="amax", include_self=True)
+    sums = torch.zeros_like(maxima).scatter_add(-1, indices,
+        torch.exp(values - maxima.gather(-1, indices)))
     return maxima + torch.log(sums)
 
 
 def stable_probability_pool(logits: Tensor, row_indices: Tensor, col_indices: Tensor,
                             weights: Tensor, nrows:int) -> tuple[Tensor, Tensor]:
-    """
-    Average fine-grid clear/cloudy probabilities over native footprints,
-    returning both probabilities in log space.
+    """Return log clear/cloudy probabilities averaged over native footprints.
 
-    `logits` contains one fine-grid map, which is flattened internally.
+    Stable: it uses logarithms to keep calculations reliable when probabilities 
+    are extremely close to zero or one.
 
-    Three equally sized COO (coordinate-format) arrays describe the overlaps:
-    - `row_indices`: the native footprint receiving each contribution.
-    - `col_indices`: the contributing pixel's index in the flattened map.
-    - `weights`: overlap area divided by the footprint's covered area.
+    ``logits`` has shape ``[..., H, W]`` (or one flat map). The shared
+    equally sized Coordinate-format (COO) arrays identify footprint rows, flattened pixel columns,
+    and positive overlap_area / covered_footprint_area weights. Indices must be
+    int64, in bounds, and weights must sum to one per row within tolerance.
+    All tensors must already be on compatible devices.
 
-    Indices must be int64 and within bounds. Weights must be positive and
-    finite, and must sum to one per footprint within tolerance. All tensors
-    must already be on compatible devices.
+    The two returned tensors have shape ``[..., nrows]`` and represent
+    ``log(sum(w * sigmoid(z)))`` and ``log(sum(w * sigmoid(-z)))`` for each map.
+    Float32 log-space reduction keeps BCE stable for extreme logits while preserving
+    gradients to fine pixels. Averaging logits would change the model. Zero
+    rows return two empty tensors without validating the unused geometry.
 
-    Returns two vectors of shape [nrows]:
-    - Log clear probability:  log(sum(w * sigmoid(z)))
-    - Log cloudy probability: log(sum(w * sigmoid(-z)))
+    logits: [M, H, W]
+    row_indices: [E]
+    col_indices: [E]
+    weights: [E]
 
-    Each sum runs over the fine pixels overlapping one native footprint.
-    The function averages probabilities, not logits; averaging logits would
-    produce different predictions.
-
-    Calculations use float32 and operate in log space to keep BCE stable
-    for extreme logits while preserving gradients to the fine pixels.
-
-    If nrows is zero, returns two empty tensors without validating the
-    unused overlap geometry.
+    nrows is the number of coarse footprints
+    M is the number of forecast maps.
+    E is the total number of overlaps.
     """
 
     if nrows == 0:
-        return logits.new_empty(0), logits.new_empty(0)
+        shape = (*logits.shape[:-2], 0)
+        return logits.new_empty(shape), logits.new_empty(shape)
 
-    flat  = logits.reshape(-1).float()
+    # COO geometry: rows identify native footprints; cols identify flattened
+    # fine-grid pixels. Multiple entries describe each footprint's overlaps.
+    flat = (logits.flatten(start_dim=-2) if logits.ndim >= 2 else logits).float() # e.g., from [M,H,W] to [M,H*W]
+
     if row_indices.dtype != torch.int64 or col_indices.dtype != torch.int64:
         raise ValueError("pooling indices must be int64")
+    
     rows, cols, w = row_indices, col_indices, weights.float()
     if (rows.ndim != 1 or cols.shape != rows.shape or w.shape != rows.shape
             or not bool(torch.isfinite(w).all()) or bool((w <= 0).any())):
         raise ValueError("pooling requires equal one-dimensional positive finite COO arrays")
+    
     if (bool((rows < 0).any()) or bool((rows >= nrows).any())
-            or bool((cols < 0).any()) or bool((cols >= flat.numel()).any())):
-        raise ValueError("pooling COO index outside [0,nrows-1]")
+            or bool((cols < 0).any()) or bool((cols >= flat.shape[-1]).any())):
+        raise ValueError("pooling COO index outside geometry")
     
     totals = w.new_zeros(nrows).index_add(0, rows, w)
     if not bool(torch.allclose(totals, torch.ones_like(totals), atol=2e-5, rtol=2e-5)):
-        raise ValueError("weights must sum to approximately 1 for every footprint")
+        raise ValueError("every pooled row must have positive normalized weights")
+    
     log_w = torch.log(w)
 
-    # log(sigmoid(z)) and log(sigmoid(-z)) remain stable for extreme logits. Re
-    return (_segment_logsumexp(log_w + F.logsigmoid(flat[cols]), rows, nrows), 
-            _segment_logsumexp(log_w + F.logsigmoid(-flat[cols]), rows, nrows))
+    # log(sigmoid(z)) and log(sigmoid(-z)) remain stable for extreme logits.
+    # Pool both classes directly in log space, avoiding log(1 - rounded_p).
+    return (_segment_logsumexp(log_w + F.logsigmoid(flat[..., cols]), rows, nrows),
+            _segment_logsumexp(log_w + F.logsigmoid(-flat[..., cols]), rows, nrows))
 
 
 def _forecast_loss(logits: Tensor, batch: Mapping[str, Any], coarse_weight: float
@@ -181,19 +192,27 @@ def _forecast_loss(logits: Tensor, batch: Mapping[str, Any], coarse_weight: floa
     
     logits is a tensor: [B, horizon, H, W] -> [B, 10, 400, 400]
     batch is a dictionary with:
-    batch["x_fine"], all fine inputs: [B, 5, 400, 400]
-    batch["x_coarse"], all coarse inputs: [B, 25, 100, 100]
     batch["target_fine"]: floats, [B, 10, 400, 400]
     batch["valid_fine"]: bools, [B, 10, 400, 400]
-    batch["coarse_supervision"]: bools, [B, 10]
+    batch["coarse_supervision"]: bools, [B, 10] (TRUE selects coarse supervision; FALSE selects fine supervision)
     batch["target_coarse"]:	floats, [B, 10, J]
     batch["valid_coarse"]:	bools, [B, 10, J]
+    batch["fine_target_mode"]: "hard" or "soft"; defaults to "hard"
+    (soft mode only) batch["target_fine_binary"]: binary evaluation labels, [B, 10, 400, 400]
+    batch["native_geometry"]: shared dictionary containing:
+        "fine_shape": (H, W)
+        "row_indices": int64 tensor, [E]
+        "col_indices": int64 tensor, [E]
+        "weights": floating tensor, [E]
 
+    E is the number of retained fine-pixel/footprint overlap entries.
+    Geometry has no batch or horizon dimension because it is shared.
     J is the number of retained native CSM footprints
     """
 
     if logits.ndim != 4 or not logits.is_floating_point() or not bool(torch.isfinite(logits).all()):
         raise ValueError("forecast logits must be finite floating point with shape [B,horizon,H,W]")
+    
     z = logits.float() # Ensures z is float32
     target = batch["target_fine"].float()
     fine = batch["valid_fine"]
@@ -246,26 +265,36 @@ def _forecast_loss(logits: Tensor, batch: Mapping[str, Any], coarse_weight: floa
     horizons = z.shape[1]
 
     # A graph-connected zero keeps backward() valid even when there is no supervision.
-    coarse_sum = (z * 0).sum((0,2,3))
-    coarse_count = coarse.sum((0,2))
-    brier_sums = [zero.detach() fpr _ in range(horizons)]
-    seen = set()
-    for record in batch.get("native_csm", ()):
+    coarse_sum = (z * 0).sum((0,2,3)) # shape: [horizons]
+    coarse_count = coarse.sum((0,2)) # shape: [horizons]
+    coarse_brier_sum = torch.zeros(horizons, device=z.device, dtype=torch.float64) # shape: [horizons]
 
+    # Find all maps (sample and horizon) that have at least one valid coarse footprint for supervision
+    b, k = coarse.any(-1).nonzero(as_tuple=True)
+    if b.numel():
+        geometry = batch["native_geometry"]
+        if geometry is None or tuple(geometry["fine_shape"]) != tuple(z.shape[-2:]):
+            raise ValueError("coarse supervision requires native geometry matching the fine grid")
+        
+        log_p, log_q = stable_probability_pool(z[b, k], geometry["row_indices"],
+            geometry["col_indices"], geometry["weights"], y.shape[-1])
+        valid = coarse[b, k]
+        # Each valid native footprint contributes once; missing QA never changes
+        # the fixed operator or its original normalized area weights.
+        safe_y = torch.where(valid, y[b, k], 0)
+        losses = torch.where(safe_y == 1, -log_p, -log_q)
+        coarse_sum = coarse_sum.index_add(0, k, torch.where(valid, losses, 0).sum(-1))
+        with torch.no_grad():
+            errors = (log_p.exp() - safe_y).square()
+            coarse_brier_sum.index_add_(0, k, torch.where(valid, errors, 0).sum(-1, dtype=torch.float64))
 
-    
-    
-
-
+    statistics = HorizonStatistics(fine_sum, fine_count, coarse_sum,
+        coarse_count, fine_brier_sum, coarse_brier_sum)
+    loss, active = statistics.objective(coarse_weight)
 
     # Callers should skip optimizer steps when the batch has no active horizon.
     return ForecastLossResult(loss, statistics, not bool(active.any()))
     
-    
-
-
-
-
 
 def forecast_loss(logits: Tensor, batch: Mapping[str, Any], *, coarse_weight: float = 0.25
                    ) -> ForecastLossResult:

@@ -244,169 +244,110 @@ def _native_geometry(geometry: Mapping[str, Any]) -> tuple[dict[str, Any], np.nd
 
 
 class ArrayForecastDataset(Dataset):
-    """Build 5 fine and 25 coarse channels from named prepared arrays."""
+    """Build five fine and 25 conditioning channels from named prepared arrays.
 
-    def __init__(self, samples: Sequence[Mapping[str, Any]], *, fine_target_mode: str = "hard"):
+    The baseline model requires H=W=400. Smaller grids divisible by four are
+    supported here for inexpensive adapter tests. Native geometry is already
+    registered to the flattened fine grid; this module never reprojects labels.
+    Pass native_geometry once for the whole dataset. Fine supervision is selected
+    whenever any target pixel is daytime; coarse supervision requires an entirely
+    nighttime/low-Sun domain. Missing labels never select another source.
+    """
+
+    def __init__(self, samples: Sequence[Mapping[str, Any]], *,
+                 native_geometry: Mapping[str, Any] | None = None,
+                 fine_target_mode: str = "hard"):
         if fine_target_mode not in ("hard", "soft"):
             raise ValueError("fine_target_mode must be hard or soft")
         self.samples = samples
         self.fine_target_mode = fine_target_mode
+        self.native_geometry, self.native_rows, self.native_size = (
+            _native_geometry(native_geometry) if native_geometry is not None
+            else (None, np.empty(0, np.int64), 0)
+        )
 
     def __len__(self) -> int:
         return len(self.samples)
 
     def __getitem__(self, index: int) -> dict[str, Any]:
-        """Prepare one forecast sample, including inputs and supervision masks."""
-
-        # Retrieve the prepared arrays for this sample.
         sample = self.samples[index]
-
-        # Establish the fine-grid dimensions.
-            # Dimensions must be positive and divisible by four.
+        if "native_csm" in sample:
+            raise ValueError("native_csm records were replaced by target_coarse/valid_coarse and shared native_geometry")
         land = np.asarray(sample["land_fraction"], dtype=np.float32)
-        shape = land.shape  # (H, W)
-        
-        if land.ndim !=2 or any(size <= 0 or size % 4 for size in shape):
+        if land.ndim != 2 or any(size <= 0 or size % 4 for size in land.shape):
             raise ValueError("fine grid must be two-dimensional with positive sizes divisible by four")
-        
-        coarse_shape = (shape[0] // 4, shape[1] // 4)
-        target_shape = (HORIZONS, *shape) # (10, H, W)
-
-        # Validate static fields.
-        _check_values(land,"land_fraction") # Verify land has finite values between 0 and 1
-        elevation = _array(sample["elevation_normalized"], "elevation_normalized", shape) # standardized elevation
-        _check_values(elevation, "elevation_normalized", low=None, high=None) # Verify elevation has finite values
-
-        # Solar cosine values must be finite and between -1 and 1.
+        shape = land.shape
+        if self.native_geometry is not None and shape != self.native_geometry["fine_shape"]:
+            raise ValueError("native geometry fine_shape must match the sample grid")
+        cond_shape = (shape[0] // 4, shape[1] // 4)
+        target_shape = (HORIZONS, *shape)
+        _check_values(land, "land_fraction")
+        elevation = _array(sample["elevation_normalized"], "elevation_normalized", shape)
+        _check_values(elevation, "elevation_normalized", low=None, high=None)
         current_solar = _array(sample["current_solar_cosine"], "current_solar_cosine", shape)
         _check_values(current_solar, "current_solar_cosine", low=-1)
-        future_solar = _array(sample["target_solar_cosine"], "target_solar_cosine", coarse_shape)
+        future_solar = _array(sample["target_solar_cosine"], "target_solar_cosine", target_shape)
         _check_values(future_solar, "target_solar_cosine", low=-1)
-
-        # NBM provides 11 cloud-cover channels on the coarse input grid.
-        nbm = _array(sample["nbm_cloud_cover"], "nbm_cloud_cover", (11, *coarse_shape))
-        _check_values(nbm, "nbm_cloud_cover") # Verify nbm has finite values
-
-        # Retrieve current satellite observations and their validity masks.
-        # Missing or invalid observations receive the placeholder value 0.5.
+        nbm = _array(sample["nbm_cloud_cover"], "nbm_cloud_cover", (11, *cond_shape))
+        _check_values(nbm, "nbm_cloud_cover")
         b2, b2_valid = _satellite(sample, "current_b2_score", shape)
-        csm, csm_valid = _satellite(sample, "current_csm", coarse_shape)
+        csm, csm_valid = _satellite(sample, "current_csm", cond_shape)
+        fine = np.stack((b2, b2_valid, land, elevation, current_solar)).astype(np.float32)
+        sine, cosine = seasonal_fields(sample["issue_time"])
+        cond = np.concatenate((nbm, future_solar[:, ::4, ::4],
+                               np.full((1, *cond_shape), sine, np.float32),
+                               np.full((1, *cond_shape), cosine, np.float32),
+                               csm[None], csm_valid[None])).astype(np.float32)
 
-        # Stack five 2D fields into fine-grid channels: (5, H, W).
-        fine = np.stack((b2,b2_valid,land,elevation,current_solar)).astype(np.float32)
-
-         # Encode the issue date as seasonal sine and cosine values.
-        sine, cosine = seasonal_fields(sample["issue_time]"])
-
-        # Join existing channel groups into 25 conditioning channels:
-        # 11 NBM + 10 future solar + 2 seasonal + CSM + CSM validity.
-        coarse= np.concatenate((nbm, future_solar,
-                                np.full((1, *coarse_shape), sine, np.float32),
-                                np.full((1, *coarse_shape), cosine, np.float32),
-                                csm[None], csm_valid[None])).astype(np.float32) # csm[None].shape = (1,100,100) vs csm.shape = (100,100)
-
-        # Select coarse supervision for an entire horizon if any pixel
-        # falls below the solar threshold. Shape: (10,).
-        coarse_horizon = np.asarray((future_solar < NIGHT_SOLAR_THRESHOLD).any(axis=(-2,-1)), dtype=bool) # One decision boolean per horizon: shape (10,)
-
-        # Expand the horizon decisions to (10, H, W).
-        # Copy because broadcast_to returns a read-only view, whereas
-        # torch.from_numpy expects writable underlying storage.
-        coarse_only = np.broadcast_to(coarse_horizon[:, None, None], target_shape).copy() 
-
-        # Fine targets and their validity mask must be supplied together.
         if ("target_fine" in sample) != ("valid_fine" in sample):
-                    raise ValueError("provide both target_fine and valid_fine, or omit both")
-
-        # If fine targets are absent, create placeholders marked invalid.
+            raise ValueError("provide both target_fine and valid_fine, or omit both")
         valid = _mask(sample.get("valid_fine", np.zeros(target_shape, bool)), "valid_fine", target_shape)
         target = _array(sample.get("target_fine", np.zeros(target_shape, np.float32)), "target_fine", target_shape)
-
-        # Disable fine supervision throughout coarse-only horizons.
-        # This creates a new array without modifying the supplied mask.
-        valid = valid & ~coarse_only
-
-        # Check only active fine targets. Hard mode requires binary labels; soft mode permits [0, 1].
         _check_values(target, "fine targets", valid=valid, binary=self.fine_target_mode == "hard")
-
-        # Replace inactive targets with zero; valid excludes them from loss.
+        coarse_supervision = (future_solar < NIGHT_SOLAR_THRESHOLD).all(axis=(1, 2))
+        valid = valid & ~coarse_supervision[:, None, None]
         target = np.where(valid, target, np.float32(0))
 
-        
+        if ("target_coarse" in sample) != ("valid_coarse" in sample):
+            raise ValueError("provide both target_coarse and valid_coarse, or omit both")
+        if "target_coarse" in sample and self.native_geometry is None:
+            raise ValueError("coarse targets require shared native_geometry")
+        coarse_shape = (HORIZONS, self.native_size)
+        coarse_target = _array(sample.get("target_coarse", np.zeros(coarse_shape, np.float32)),
+                               "target_coarse", coarse_shape)
+        coarse_valid = _mask(sample.get("valid_coarse", np.zeros(coarse_shape, bool)),
+                             "valid_coarse", coarse_shape)
+        _check_values(coarse_target, "native CSM targets", valid=coarse_valid, binary=True)
+        coarse_valid = coarse_valid[:, self.native_rows] & coarse_supervision[:, None]
+        coarse_target = np.where(coarse_valid, coarse_target[:, self.native_rows], np.float32(0))
+        result = {"x_fine": torch.from_numpy(fine), "x_coarse": torch.from_numpy(cond),
+                      "target_fine": torch.from_numpy(target),
+                      "valid_fine": torch.from_numpy(valid.copy()),
+                      "coarse_supervision": torch.from_numpy(coarse_supervision),
+                      "target_coarse": torch.from_numpy(coarse_target),
+                      "valid_coarse": torch.from_numpy(coarse_valid),
+                      "native_geometry": self.native_geometry,
+                      "metadata": dict(sample.get("metadata", {})), "fine_target_mode": self.fine_target_mode}
 
-        # Check AFter!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-        # Prepare native CSM targets and their overlap geometry.
-        # Allow at most one record per horizon.
-        native, seen = [], set()
-
-        for record in sample.get("native_csm", ()):
-            prepared = _native_record(
-                record, coarse_horizon, fine_shape=shape
-            )
-            horizon = prepared["horizon_index"]
-    
-            if horizon in seen:
-                raise ValueError(
-                    "duplicate native horizon record; "
-                    "combine footprints in one operator"
-                )
-            seen.add(horizon)
-    
-            # Keep records containing at least one accepted footprint.
-            if prepared["valid"].any():
-                native.append(prepared)
-    
-        # Package this sample as CPU tensors plus metadata.
-        result = {
-            "x_fine": torch.from_numpy(fine),
-            "x_cond": torch.from_numpy(coarse),
-            "target_fine": torch.from_numpy(target),
-            "valid_fine": torch.from_numpy(valid),
-            "coarse_only": torch.from_numpy(coarse_only),
-            "native_csm": native,
-            "metadata": dict(sample.get("metadata", {})),
-            "fine_target_mode": self.fine_target_mode,
-        }
-    
-        # Soft training targets require separate binary evaluation labels.
         if self.fine_target_mode == "soft":
-            if (
-                "target_fine" in sample
-                and "target_fine_binary" not in sample
-            ):
-                raise ValueError(
-                    "soft targets require authoritative "
-                    "target_fine_binary evaluation labels"
-                )
-    
-            binary = _array(
-                sample.get(
-                    "target_fine_binary",
-                    np.zeros(target_shape, np.float32),
-                ),
-                "target_fine_binary",
-                target_shape,
-            )
-            _check_values(
-                binary, "binary evaluation targets", valid=valid, binary=True
-            )
-    
-            # Apply the same fine-supervision mask to evaluation labels.
-            result["target_fine_binary"] = torch.from_numpy(
-                np.where(valid, binary, np.float32(0))
-            )
-    
+            if "target_fine" in sample and "target_fine_binary" not in sample:
+                raise ValueError("soft targets require authoritative target_fine_binary evaluation labels")
+            binary = _array(sample.get("target_fine_binary", np.zeros(target_shape, np.float32)),
+                            "target_fine_binary", target_shape)
+            _check_values(binary, "binary evaluation targets", valid=valid, binary=True)
+            result["target_fine_binary"] = torch.from_numpy(np.where(valid, binary, np.float32(0)))
         elif "target_fine_binary" in sample:
-            raise ValueError(
-                "target_fine_binary is only used in soft target mode"
-            )
-    
+            raise ValueError("target_fine_binary is only used in soft target mode")
         return result
 
 
 def forecast_collate(batch: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    """Combine prepared samples into one batch for training or evaluation."""
+    """Combine samples into a batch for model input and loss computation.
+
+    Stack fine/coarse labels and masks; share the dataset's geometry once without
+    stacking or copying it. Samples must use the same geometry object and fine
+    target mode. Soft mode also stacks binary Brier evaluation labels.
+    """
 
     # Require at least one sample.
     if not batch:
@@ -418,13 +359,14 @@ def forecast_collate(batch: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     if len(modes) != 1:
         raise ValueError("cannot collate mixed fine target modes")
 
+    geometry = batch[0]["native_geometry"]
+    if any(sample["native_geometry"] is not geometry for sample in batch):
+        raise ValueError("batch samples must share one dataset native_geometry")
+
     # Stack matching tensors along a new first dimension: the batch axis.
     # Example: B tensors shaped (5, H, W) become (B, 5, H, W).
-    keys = ("x_fine", "x_cond", "target_fine", "valid_fine", "coarse_only")
-    result: dict[str, Any] = {
-        name: torch.stack([sample[name] for sample in batch])
-        for name in keys
-    }
+    keys = ("x_fine", "x_coarse", "target_fine", "valid_fine", "coarse_supervision", "target_coarse", "valid_coarse")
+    result: dict[str, Any] = {name: torch.stack([sample[name] for sample in batch]) for name in keys}
 
     # Store the shared target mode once for the whole batch.
     result["fine_target_mode"] = batch[0]["fine_target_mode"]
@@ -438,15 +380,7 @@ def forecast_collate(batch: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     # Preserve metadata as a list, in the same order as the samples.
     result["metadata"] = [sample["metadata"] for sample in batch]
 
-    # Combine native CSM records into one list instead of stacking them,
-    # because samples may have different numbers of records and footprints.
-    # Copy each record's dictionary and add its sample's position in the batch.
-    # Example: batch_index=1 identifies the second sample.
-    result["native_csm"] = [
-        dict(record, batch_index=b)
-        for b, sample in enumerate(batch)
-        for record in sample["native_csm"]
-    ]
+    result["native_geometry"] = geometry
 
     return result
 
