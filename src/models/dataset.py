@@ -1,3 +1,11 @@
+"""Observation preprocessing, model channels and native-footprint targets.
+
+SolarGeometry caches solar maps; processed_b2 applies the frozen M11/Tlocal
+transformation. ArrayForecastDataset packs prepared arrays without file I/O.
+See the README's array contract. Input arrays are borrowed read-only; callers
+must not change them while the dataset is in use. Output tensors are CPU tensors.
+"""
+
 from calendar import isleap
 from collections.abc import (
     Mapping,  # Key-based container, e.g. dict; hint: Mapping[str, Any]
@@ -178,126 +186,61 @@ def _indices(value: Any, name: str) -> np.ndarray:
         raise ValueError(f"{name} must be a one-dimensional integer array")
     return result.astype(np.int64)
 
-def _native_record(
-    record: Mapping[str, Any],
-    coarse_horizon: np.ndarray,
-    *,
-    fine_shape: tuple[int, int],
-) -> dict[str, Any]:
-    
-    """Validate native CSM targets and geometry; enable coarse-only horizons."""
+def _native_geometry(geometry: Mapping[str, Any]) -> tuple[dict[str, Any], np.ndarray, int]:
+    """Validate one fixed overlap operator and retain covered footprints once.
 
-    # Require one boolean supervision decision per forecast horizon.
-    coarse_horizon = _mask(coarse_horizon, "coarse_horizon", (HORIZONS,))
-
-    # Identify the forecast horizon; reject booleans and out-of-range indices.
-    horizon = integer_index(record["horizon_index"])
-    if (
-        isinstance(record["horizon_index"], (bool, np.bool_))
-        or not 0 <= horizon < HORIZONS
-    ):
-        raise ValueError("native horizon_index must be an integer from 0 to 9")
-
-    # Each entry represents one native satellite footprint.
-    target = np.asarray(record["target"], dtype=np.float32)
-    if target.ndim != 1:
-        raise ValueError("native target must be one-dimensional")
-
-    shape = target.shape
-
-    # This mask describes coarse target validity, not fine target validity.
-    native_valid = _mask(record["valid"], "native valid", shape)
-    _check_values(
-        target, "native CSM targets", valid=native_valid, binary=True
-    )
-
-    # Sparse overlap mapping:
-    # rows[i] identifies a native footprint.
-    # cols[i] identifies an overlapping pixel in the flattened fine grid.
-    # weights[i] gives that fine pixel's contribution to the footprint average.
-    rows = _indices(record["row_indices"], "row_indices")
-    cols = _indices(record["col_indices"], "col_indices")
-    weights = _array(record["weights"], "weights", rows.shape)
+    Labels use the original native row order. The returned indices select rows
+    with at least 99% coverage; the compact operator pools those rows for every
+    sample and horizon. QA remains a per-observation validity mask.
+    """
+    shape = tuple(_indices(geometry["fine_shape"], "fine_shape").tolist())
+    if len(shape) != 2 or any(size <= 0 or size % 4 for size in shape):
+        raise ValueError("native fine_shape must contain two positive sizes divisible by four")
+    coverage = np.asarray(geometry["coverage"], dtype=np.float32)
+    if coverage.ndim != 1:
+        raise ValueError("native coverage must be one-dimensional")
+    rows = _indices(geometry["row_indices"], "row_indices")
+    cols = _indices(geometry["col_indices"], "col_indices")
+    weights = _array(geometry["weights"], "weights", rows.shape)
 
     if cols.shape != rows.shape:
         raise ValueError("native coordinate format row and column shapes differ")
+    pixels = shape[0] * shape[1]
+    if ((rows < 0).any() or (rows >= coverage.size).any()
+            or (cols < 0).any() or (cols >= pixels).any()
+            or not np.isfinite(weights).all() or (weights <= 0).any()):
+        raise ValueError("native coordinate format indices must be in bounds and weights positive and finite")
 
-    # Validate index bounds and require positive, finite overlap weights.
-    pixels = fine_shape[0] * fine_shape[1]
-    if (
-        (rows < 0).any()
-        or (rows >= target.size).any()
-        or (cols < 0).any()
-        or (cols >= pixels).any()
-        or not np.isfinite(weights).all()
-        or (weights <= 0).any()
-    ):
-        raise ValueError(
-            "native coordinate format indices must be in bounds "
-            "and weights positive and finite"
-        )
-
-    # One coverage fraction and pair of areas per native footprint.
-    coverage, native_area, covered_area = (
-        _array(record[name], name, shape)
-        for name in ("coverage", "native_area", "covered_area")
+    # native_area: its full area.
+    # covered_area: the area represented by the mapping.
+    # coverage: the supplied covered fraction.
+    native_area, covered_area = (
+        _array(geometry[name], name, coverage.shape)
+        for name in ("native_area", "covered_area")
     )
 
-    # Check that supplied coverage agrees with the supplied areas.
-    # The denominator floor avoids division by zero.
-    calculated = covered_area / np.maximum(
-        native_area, np.finfo(np.float32).tiny
-    )
+    # Verification that coverage = calculated
+    calculated = covered_area / np.maximum(native_area, np.finfo(np.float32).tiny)
     comparable = np.isfinite(coverage) & np.isfinite(calculated)
     if (np.abs(coverage[comparable] - calculated[comparable]) > 2e-5).any():
         raise ValueError("native coverage does not match footprint areas")
 
-    # Initially accept valid targets with sufficient coverage and usable areas.
-    accepted = (
-        native_valid
-        & np.isfinite(coverage)
-        & (coverage >= MINIMUM_COVERAGE)
-        & (coverage <= 1 + 2e-5)
-        & np.isfinite(native_area)
-        & (native_area > 0)
-        & np.isfinite(covered_area)
-        & (covered_area > 0)
-    )
-
-    # Sum overlap weights separately for each native footprint.
-    totals = np.bincount(rows, weights=weights, minlength=target.size)
-
-    # Require at least one contribution and a coarse-only horizon.
-    # Fine targets must already be disabled for this horizon by the caller.
-    accepted &= (totals > 0) & coarse_horizon[horizon]
-
-    # Accepted footprints must average their contributing fine pixels.
+    accepted = (np.isfinite(coverage) & (coverage >= MINIMUM_COVERAGE)
+                & (coverage <= 1 + 2e-5) & np.isfinite(native_area) & (native_area > 0)
+                & np.isfinite(covered_area) & (covered_area > 0))
+    totals = np.bincount(rows, weights=weights, minlength=coverage.size)
+    accepted &= totals > 0
     if not np.allclose(totals[accepted], 1, atol=2e-5, rtol=2e-5):
-        raise ValueError(
-            "accepted native footprints require normalized area weights"
-        )
+        raise ValueError("accepted native footprints require normalized area weights")
+    selected = np.flatnonzero(accepted)
+    mapping = np.full(coverage.size, -1, np.int64)
+    mapping[selected] = np.arange(selected.size)
+    keep = mapping[rows] >= 0
+    operator = {"fine_shape": shape, "row_indices": torch.from_numpy(mapping[rows[keep]]),
+                    "col_indices": torch.from_numpy(cols[keep].copy()),
+                    "weights": torch.from_numpy(weights[keep].copy())}
+    return operator, selected, coverage.size
 
-    # Retain all footprints; the final validity mask selects usable ones.
-    # Replace originally invalid targets with a harmless placeholder.
-    arrays = {
-        "target": np.where(native_valid, target, np.float32(0)),
-        "valid": accepted,
-        "row_indices": rows,
-        "col_indices": cols,
-        "weights": weights,
-        "coverage": coverage,
-        "native_area": native_area,
-        "covered_area": covered_area,
-    }
-
-    # Copy arrays into independently owned storage and return CPU tensors.
-    return {
-        "horizon_index": horizon,
-        **{
-            name: torch.from_numpy(np.array(value, copy=True))
-            for name, value in arrays.items()
-        },
-    }
 
 
 class ArrayForecastDataset(Dataset):
