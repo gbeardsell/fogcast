@@ -1,5 +1,5 @@
 """Self-contained clear-sky forecasting architecture and supervision."""
-from .residual_unet_fogcast import (
+from .fogcast import (
     ArrayForecastDataset,
     ResidualUNet,
     forecast_collate,

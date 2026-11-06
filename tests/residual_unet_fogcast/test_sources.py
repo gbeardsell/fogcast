@@ -2,8 +2,8 @@
 from datetime import timedelta
 import numpy as np
 import pytest
-from fogcast.residual_unet_fogcast.dataset import utc
-from fogcast.residual_unet_fogcast.sources import GoesCatalog, RangeReader, Scan, decode_csm, parse_scan, resample_b2, select_index
+from fogcast.dataset import utc
+from fogcast.sources import GoesCatalog, RangeReader, Scan, decode_csm, parse_scan, resample_b2, select_index
 
 def test_b2_interpolation_preserves_mask_and_original_quantization():
     pytest.importorskip('scipy')

@@ -16,7 +16,7 @@ live = ["pyproj>=3.6", "xarray>=2024.1", "h5netcdf>=1.3", "Pillow>=10", "eccodes
 
 [tool.setuptools.packages.find]
 where = ["src"]
-exclude = ["fogcast.residual_unet_fogcast.deprecated*"]
+exclude = ["fogcast.deprecated*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

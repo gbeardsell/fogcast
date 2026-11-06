@@ -5,8 +5,8 @@ import numpy as np
 import pytest
 import torch
 
-from fogcast.residual_unet_fogcast.forecast import MODEL_MEMBERS, sha256
-from fogcast.residual_unet_fogcast.model import ResidualUNet
+from residual_unet_fogcast.forecast import MODEL_MEMBERS, sha256
+from residual_unet_fogcast.model import ResidualUNet
 
 
 @pytest.fixture(scope="session")

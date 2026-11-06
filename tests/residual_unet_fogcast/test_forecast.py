@@ -6,10 +6,10 @@ import numpy as np
 import pytest
 import torch
 
-from fogcast.residual_unet_fogcast import forecast
-from fogcast.residual_unet_fogcast.dataset import ArrayForecastDataset
-from fogcast.residual_unet_fogcast.dataset import forecast_collate
-from fogcast.residual_unet_fogcast.losses import forecast_loss
+from fogcast import forecast
+from fogcast.dataset import ArrayForecastDataset
+from fogcast.dataset import forecast_collate
+from fogcast.losses import forecast_loss
 
 
 def test_corrupt_bundle_is_rejected_before_loading_models(tmp_path):

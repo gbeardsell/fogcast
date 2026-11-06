@@ -1,11 +1,22 @@
 import copy
 from datetime import datetime, timedelta, timezone
+
 import numpy as np
 import pytest
 import torch
 from torch.utils.data import DataLoader
+
 from fogcast import ArrayForecastDataset, forecast_collate, forecast_loss
-from fogcast.residual_unet_fogcast.dataset import CONDITIONING_CHANNELS, FINE_CHANNELS, NIGHT_SOLAR_THRESHOLD, seasonal_fields, SolarGeometry, processed_b2, utc
+from fogcast.dataset import (
+    CONDITIONING_CHANNELS,
+    FINE_CHANNELS,
+    NIGHT_SOLAR_THRESHOLD,
+    SolarGeometry,
+    processed_b2,
+    seasonal_fields,
+    utc,
+)
+
 
 @pytest.fixture
 def sample():
