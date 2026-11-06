@@ -1,0 +1,34 @@
+{
+  "schema": "fogcast-preview-map-v1",
+  "created_utc": "2026-11-06T02:35:06.794923+00:00",
+  "epsg": 32610,
+  "bounds_m": [
+    450000,
+    4080000,
+    650000,
+    4280000
+  ],
+  "shape": [
+    400,
+    400
+  ],
+  "row_order": "north_up",
+  "attribution": "\u00a9 Esri, HERE, Garmin, \u00a9 OpenStreetMap contributors, and the GIS user community",
+  "source_terms": "https://doc.arcgis.com/en/arcgis-online/reference/static-maps.htm",
+  "layers": {
+    "base": {
+      "file": "bay_area_base.png",
+      "source_url": "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/export?bbox=450000%2C4080000%2C650000%2C4280000&bboxSR=32610&imageSR=32610&size=400%2C400&format=png32&transparent=true&f=image",
+      "bytes": 45670,
+      "sha256": "638503275f2814a984d52d9589285d0bc4bd60662176f11ab7406994ff6fc96c",
+      "copyright": "Esri, HERE, Garmin, (c) OpenStreetMap contributors, and the GIS user community"
+    },
+    "labels": {
+      "file": "bay_area_labels.png",
+      "source_url": "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/export?bbox=450000%2C4080000%2C650000%2C4280000&bboxSR=32610&imageSR=32610&size=400%2C400&format=png32&transparent=true&f=image",
+      "bytes": 17919,
+      "sha256": "4f01eaa744ac05b54ca7b9cf3e555ee5c59582346ce8d49b08f555a3a2d78c53",
+      "copyright": "Esri, HERE, Garmin, (c) OpenStreetMap contributors, and the GIS user community"
+    }
+  }
+}

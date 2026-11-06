@@ -192,25 +192,97 @@ def _atomic_npz(path, **arrays):
         np.savez_compressed(stream, **arrays)
     temporary.replace(path)
 
-def preview(path, probabilities, issue):
-    """Save a north-up PNG overview of the ten south-up probability maps.
+def _preview_map():
+    """Load checksum-bound north-up map layers registered to the output grid."""
+    from PIL import Image
+    directory = Path(__file__).with_name("data")
+    manifest = json.loads((directory / "map_manifest.json").read_text())
+    if (manifest.get("epsg") != 32610 or manifest.get("shape") != [400,400]
+            or manifest.get("bounds_m") != [450000,4080000,650000,4280000]
+            or manifest.get("row_order") != "north_up"):
+        raise ValueError("preview map must match the native forecast grid")
+    layers = []
+    for name in ("base", "labels"):
+        spec = manifest["layers"][name]
+        path = directory / spec["file"]
+        if path.stat().st_size != spec["bytes"] or sha256(path) != spec["sha256"]:
+            raise ValueError("preview map checksum differs: " + name)
+        with Image.open(path) as image:
+            if image.size != (400,400):
+                raise ValueError("invalid preview map dimensions")
+            layers.append(image.convert("RGBA"))
+    return layers[0], layers[1], manifest["attribution"]
 
-    Panels run +1h through +10h, with blue denoting cloudy and gold clear.
-    Only the display is flipped; the underlying forecast arrays stay south-up.
-    Pillow is imported on demand, and the destination directory must exist.
+def preview(path, probabilities, issue):
+    """Render ten maps in the website's dark basemap and translucent cloud style.
+
+    The display uses the website's binary mask: P(clear)>=0.5 is clear; lower
+    values receive RGB(226,235,240) at alpha155/255. Labels are drawn above clouds
+    at0.95opacity. Numeric inputs are unmodified. Only the display flips the
+    south-up arrays, aligning them with the packaged north-up EPSG32610 maps.
+    Map loading is offline. Headings use Pacific time, including daylight saving.
     """
-    from PIL import Image, ImageDraw
-    canvas = Image.new("RGB", (1000, 490), "white")
+    from zoneinfo import ZoneInfo
+
+    from PIL import Image, ImageDraw, ImageFont
+    from PIL.PngImagePlugin import PngInfo
+    probabilities = np.asarray(probabilities)
+    if (probabilities.shape != (10,400,400) or not np.isfinite(probabilities).all()
+            or np.any((probabilities < 0) | (probabilities > 1))):
+        raise ValueError("preview requires ten finite [0,1] probability maps")
+    issue = utc(issue)
+    pacific = ZoneInfo("America/Los_Angeles")
+    base, labels, attribution = _preview_map()
+    labels.putalpha(labels.getchannel("A").point(lambda a: round(a*.95)))
+    canvas = Image.new("RGB", (2112,1136), "#0f131c")
     draw = ImageDraw.Draw(canvas)
-    draw.text((8, 6), f"Fogcast | issued {issue:%Y-%m-%d %H:%M} UTC | P(clear): blue 0, gold 1", fill="black")
+    title_font = ImageFont.load_default(size=34)
+    heading_font = ImageFont.load_default(size=22)
+    body_font = ImageFont.load_default(size=18)
+    small_font = ImageFont.load_default(size=14)
+    light, muted, orange = "#eef2f7", "#aab5c1", "#eb5424"
+    local_issue = issue.astimezone(pacific)
+    clock = lambda t: t.strftime("%I:%M %p %Z").lstrip("0")
+    draw.text((24,20), "Fogcast", font=title_font, fill=light)
+    draw.text((24,66), "Model I · 3-seed blend · San Francisco Bay Area", font=body_font, fill=muted)
+    draw.text((650,27), f"Issued {local_issue:%b %d, %Y} · {clock(local_issue)}", font=heading_font, fill=light)
+    draw.text((650,59), f"{issue:%Y-%m-%d %H:%M} UTC", font=small_font, fill=muted)
+    draw.text((1565,27), "Clear when P(clear) is at least 50%", font=body_font, fill=light)
+    for left, color, text in ((1565, "#222226", "Clear"), (1745, "#979ea2", "Cloudy")):
+        draw.rectangle((left,62,left+35,82), fill=color, outline="#65717c")
+        draw.text((left+46,62), text, font=body_font, fill=muted)
+    draw.line((24,109,2088,109), fill="#2a3540", width=1)
     for h, probability in enumerate(probabilities):
-        p = np.flipud(probability)  # Stored arrays are south up; preview north is up.
-        colors = np.stack((35 + 220 * p, 65 + 155 * p, 145 - 95 * p), axis=-1).astype(np.uint8)
-        image = Image.fromarray(colors).resize((200, 200))
-        left, top = h % 5 * 200, 30 + h // 5 * 230
-        draw.text((left + 4, top), f"+{h+1}h  {issue + timedelta(hours=h+1):%d %b %H:%M} UTC", fill="black")
-        canvas.paste(image, (left, top + 18))
-    canvas.save(path)
+        valid = issue + timedelta(hours=h+1)
+        local = valid.astimezone(pacific)
+        left, top = 24 + h%5*416, 170 + h//5*472
+        draw.text((left+8,top-48), clock(local), font=heading_font, fill=light)
+        draw.text((left+8,top-19), f"{local:%a %b %d} · {valid:%b %d %H:%M} UTC", font=small_font, fill=muted)
+        draw.text((left+345,top-43), f"+{h+1}h", font=body_font, fill=orange)
+        rgba = np.empty((400,400,4), np.uint8)
+        rgba[...,:3] = (226,235,240)
+        rgba[...,3] = (np.flipud(probability) < .5).astype(np.uint8)*155
+        image = Image.alpha_composite(base, Image.fromarray(rgba))
+        image = Image.alpha_composite(image, labels)
+        map_draw = ImageDraw.Draw(image)
+        map_draw.rectangle((352,8,393,32), fill=(15,19,28,220))
+        map_draw.text((359,12), "N", font=small_font, fill=light)
+        map_draw.line((383,26,383,14), fill=light, width=1)
+        map_draw.polygon(((379,17),(383,11),(387,17)), fill=light)
+        map_draw.rectangle((8,352,134,394), fill=(15,19,28,220))
+        map_draw.line((20,381,120,381), fill=light, width=2)
+        map_draw.line((20,377,20,385), fill=light, width=2)
+        map_draw.line((120,377,120,385), fill=light, width=2)
+        map_draw.text((49,358), "50 km", font=small_font, fill=light)
+        canvas.paste(image.convert("RGB"), (left,top))
+        draw.rectangle((left-1,top-1,left+400,top+400), outline="#394855", width=1)
+    draw.text((24,1067), "Pale shading marks cloudy pixels; geographic labels remain visible above the clouds.", font=body_font, fill=muted)
+    draw.text((24,1098), "Map: " + attribution, font=small_font, fill=muted)
+    metadata = PngInfo()
+    metadata.add_text("Description", "Fogcast Model I cloud-mask display; probabilities retained in forecast.npz.")
+    metadata.add_text("Display", "binary; clear >= 0.5; cloud RGB226,235,240 alpha155; labels opacity0.95")
+    metadata.add_text("Map attribution", attribution)
+    canvas.save(path, pnginfo=metadata)
 
 def run(args):
     """Execute one live forecast or offline replay and return its receipt.

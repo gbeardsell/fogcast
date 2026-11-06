@@ -69,7 +69,9 @@ unavailable, the command explains the failure.
 
 Each example writes four files:
 
-- `forecast.png`: a north-up overview of the ten forecast maps.
+- `forecast.png`: ten north-up maps styled like fogcast.today, with a dark
+  geographic basemap, pale semi-transparent clouds, and place labels above the
+  clouds. Headings show Pacific times, with UTC times below.
 - `forecast.npz`: ten `clear_probability` arrays, shape `[10, 400, 400]`, plus
   coordinates and UTC issue/valid times. Probabilities range from 0 (cloudy) to 1
   (clear). Arrays are stored south-up.
@@ -80,6 +82,13 @@ Results are saved under `outputs/historical/` or `outputs/current/`, depending
 on the example. Probabilities describe clear versus cloudy conditions; the
 model does not separately identify fog types. The 500 m grid spacing does not
 establish the effective resolution of the forecast.
+
+The PNG uses the website's binary cloud display: a pixel is clear when its
+predicted clear-sky probability is at least 50%; otherwise a cloud layer is drawn
+at approximately 61% opacity. The NPZ retains the original continuous probabilities.
+The small map backgrounds are included in the installed package, so rendering
+requires no map downloads. Map attribution appears at the bottom of each PNG;
+source details are in [the map notice](src/fogcast/residual_unet_fogcast/data/NOTICE.md).
 
 Choose a new output directory when rerunning an example:
 
@@ -128,6 +137,14 @@ the encoder and decoder and residual connections helping optimization.
 The 25 conditioning channels enter at an intermediate encoder level. Each member
 predicts all ten hours in one forward pass, retaining the central 400 × 400 output
 and using the surrounding input area as context.
+
+![Fogcast Model I residual U-Net architecture and three-seed probability blend](docs/architecture/residual_unet_fogcast_architecture.svg)
+
+*Figure 1. One Model I member (above) and the three-seed blend (below). Expanded
+600 × 600 inputs provide a 50 km context margin around the central 400 × 400
+forecast. Each decoder step resizes to its skip connection's exact grid. Each
+member's cropped logits pass through sigmoid before their probabilities are
+averaged. [PNG version](docs/architecture/residual_unet_fogcast_architecture.png).*
 
 The blend averages the three members' sigmoid probabilities with equal weights,
 accumulating in float64 and returning float32. Selected seeds/epochs are

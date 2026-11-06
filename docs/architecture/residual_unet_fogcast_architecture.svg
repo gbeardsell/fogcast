@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg
    width="1460"
-   height="1150"
-   viewBox="0 0 1460 1150"
+   height="1070.0647"
+   viewBox="0 0 1460 1070.0647"
    role="img"
    aria-labelledby="title description"
    version="1.1"
@@ -12,9 +12,12 @@
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
-   xmlns:svg="http://www.w3.org/2000/svg">
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:dc="http://purl.org/dc/elements/1.1/">
   <sodipodi:namedview
-     id="namedview85"
+     id="namedview94"
      pagecolor="#ffffff"
      bordercolor="#000000"
      borderopacity="0.25"
@@ -22,19 +25,19 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="1.0547826"
-     inkscape:cx="729.53421"
-     inkscape:cy="575"
-     inkscape:window-width="2560"
-     inkscape:window-height="1494"
-     inkscape:window-x="-11"
-     inkscape:window-y="-11"
+     inkscape:zoom="0.7433121"
+     inkscape:cx="730.51414"
+     inkscape:cy="1041.958"
+     inkscape:window-width="3440"
+     inkscape:window-height="1369"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
      inkscape:window-maximized="1"
      inkscape:current-layer="svg85" />
   <title
-     id="title">Fogcast baseline A architecture: observation and forecast fusion in a residual U-Net</title>
+     id="title">Fogcast Model I: expanded-context residual U-Net and three-seed probability blend</title>
   <desc
-     id="description">Tensors use batch, channel, height, width order. The five-channel fine input at 400 by 400 combines current GOES B2-derived clear score and validity, land fraction, elevation and current solar cosine. Encoder 0 produces 16 channels at 400 by 400, encoder 1 produces 32 channels at 200 by 200, and encoder 2 produces 32 channels at 100 by 100. At this two-kilometre level, concatenate 25 conditioning channels: current GOES CSM clear class and validity, eleven NBM sky-cover forecasts valid from issuance through ten hours ahead, ten future solar cosines, and two seasonal sine/cosine fields. Fusion maps the resulting 57 channels to 64. Skip 2 branches after this fusion. Encoder 3 produces 128 channels at 50 by 50; the bottleneck produces 256 at 25 by 25. Each decoder step first bilinearly resizes by two, then concatenates the corresponding encoder skip, then applies a residual block. Decoder 3 receives 384 channels and returns 128 at 50 by 50; decoder 2 receives 192 and returns 64 at 100 by 100; decoder 1 receives 96 and returns 32 at 200 by 200; decoder 0 receives 48 and returns 16 at 400 by 400. A one-by-one convolution gives ten logits; sigmoid gives ten hourly clear-sky probability maps at 500 metres for one through ten hours ahead, all in one forward pass.</desc>
+     id="description">Tensor order is batch, channel, height, width. Each Model I member takes fine inputs [B,5,600,600] and weather/context inputs [B,25,150,150], covering 300 by 300 km. The encoder produces 16 channels on a 600 by 600 grid, 32 on 300 by 300, and 32 on 150 by 150. Fusion with the 25 conditioning channels gives 64 channels on 150 by 150. The next encoder has 128 channels on 75 by 75; the bottleneck has 256 on 38 by 38. Bilinear resizing to the exact skip grid precedes each decoder concatenation: 38 to 75, 75 to 150, 150 to 300, and 300 to 600. Decoder outputs have 128, 64, 32, and 16 channels respectively. The 1 by 1 head gives 10 logits on 600 by 600; crop both axes to 100:500, then sigmoid gives [B,10,400,400] clear probabilities over the central 200 by 200 km. The surrounding 50 km on each side provides context. Seeds 42, 43, and 44 at epochs 21, 30, and 28 share this architecture and the same prepared inputs, with independently trained weights. Average their sigmoid probabilities equally, summing in float64 and returning float32. Output horizons are 1 through 10 hours; cloudy is 0, clear is 1.</desc>
   <defs
      id="defs2">
     <marker
@@ -46,7 +49,7 @@
        orient="auto"
        markerUnits="userSpaceOnUse">
       <path
-         d="M 0 0 L 9 4.5 L 0 9 Z"
+         d="M 0,0 9,4.5 0,9 Z"
          fill="#32627b"
          id="path1" />
     </marker>
@@ -59,13 +62,13 @@
        orient="auto"
        markerUnits="userSpaceOnUse">
       <path
-         d="M 0 0 L 9 4.5 L 0 9 Z"
+         d="M 0,0 9,4.5 0,9 Z"
          fill="#5a8ca4"
          id="path2" />
     </marker>
     <style
        id="style2">
-      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; fill: #17354a; }
+      text { font-family: 'DejaVu Sans', Arial, sans-serif; fill: #17354a; }
       .heading { font-size: 32px; font-weight: 700; letter-spacing: -.4px; }
       .subtitle { font-size: 21px; fill: #52697b; }
       .section { font-size: 16px; font-weight: 700; letter-spacing: 1.6px; fill: #60788a; }
@@ -85,32 +88,35 @@
   </defs>
   <rect
      width="1460"
-     height="1150"
+     height="1069.5372"
      rx="18"
      fill="#ffffff"
-     id="rect2" />
+     id="rect2"
+     x="0"
+     y="0"
+     style="stroke-width:0.825369" />
   <rect
-     x=".75"
-     y=".75"
-     width="1458.5"
-     height="1148.5"
-     rx="17"
+     x="0.61863017"
+     y="0.61863017"
+     width="1458.7627"
+     height="1066.9547"
+     rx="17.003063"
      fill="none"
      stroke="#dce5eb"
-     stroke-width="1.5"
+     stroke-width="1.23726"
      id="rect3" />
   <text
      x="32"
      y="49"
      class="heading"
-     id="text3">Fogcast architecture</text>
+     id="text3">Fogcast Model I architecture</text>
   <text
      x="32"
      y="85"
      class="subtitle"
-     id="text4">Baseline Model A · Residual 2D U-Net · ten forecast hours in one forward pass</text>
+     id="text4">One residual U-Net member · 300 km inputs → central 200 km forecast</text>
   <path
-     d="M 32 107 H 1428"
+     d="M 32,107 H 1428"
      stroke="#e2e9ef"
      id="path4" />
   <text
@@ -133,10 +139,9 @@
      y="233"
      class="section"
      id="text8">DECODER</text>
-  <!-- Source fields: x_fine has 5 channels, x_cond has 25. -->
   <g
      id="fine-input"
-     data-shape="B,5,400,400">
+     data-shape="B,5,600,600">
     <rect
        x="32"
        y="239"
@@ -166,11 +171,11 @@
        class="tensor"
        id="text10"
        style="font-size:21px;font-family:'-apple-system', BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;font-variant-numeric:tabular-nums;fill:#17354a">x<tspan
-   font-size="15"
+   font-size="15px"
    baseline-shift="sub"
-   id="tspan87">fine</tspan>: [B, 5, 400, 400]</text>
+   id="tspan87">fine</tspan>: [B, 5, 600, 600]</text>
     <path
-       d="M 52 329 H 352"
+       d="M 52,329 H 352"
        stroke="#cddfeb"
        id="path10" />
     <text
@@ -178,12 +183,12 @@
        y="363"
        class="body"
        id="text11"
-       style="font-size:19px">Current GOES B2 clear score · 2</text>
+       style="font-size:19px">B2 clear score + validity · 2</text>
     <text
        x="52"
        y="393"
        class="detail"
-       id="text12">+ validity mask</text>
+       id="text12">Current GOES observation</text>
     <text
        x="52"
        y="439"
@@ -198,13 +203,13 @@
     <text
        x="52"
        y="526"
-       font-size="17"
+       font-size="17px"
        fill="#52697b"
        id="fine-channel-total">2 + 2 + 1 = 5 channels</text>
   </g>
   <g
      id="conditioning-input"
-     data-shape="B,25,100,100">
+     data-shape="B,25,150,150">
     <rect
        x="32"
        y="570"
@@ -224,9 +229,12 @@
        x="52"
        y="643"
        class="tensor"
-       id="text16">x<tspan font-size="15" baseline-shift="sub">coarse</tspan>: [B, 25, 100, 100]</text>
+       id="text16">x<tspan
+   font-size="15px"
+   baseline-shift="sub"
+   id="tspan1">coarse</tspan>: [B, 25, 150, 150]</text>
     <path
-       d="M 52 662 H 352"
+       d="M 52,662 H 352"
        stroke="#e6dcc8"
        id="path16" />
     <rect
@@ -245,7 +253,7 @@
     <text
        x="67"
        y="727"
-       font-size="17"
+       font-size="17px"
        fill="#52697b"
        id="text18">Clear class + validity · 2 km grid</text>
     <rect
@@ -278,7 +286,10 @@
        x="67"
        y="843"
        class="body"
-       id="text21">Future solar incidence <tspan x="67" dy="27">factors · 10</tspan></text>
+       id="text21">Future solar incidence <tspan
+   x="67"
+   dy="27"
+   id="tspan2">factors · 10</tspan></text>
     <text
        x="67"
        y="914"
@@ -287,42 +298,41 @@
     <text
        x="52"
        y="947"
-       font-size="17"
+       font-size="17px"
        fill="#74694f"
        id="text23">2 + 11 + 10 + 2 = 25 channels</text>
   </g>
-  <!-- Encoder. Channel/grid dimensions are outputs of each block. -->
   <path
      class="flow"
-     d="M 372 280 H 420"
+     d="m 372,280 h 48"
      id="path23" />
   <path
      class="flow"
-     d="M 550 321 V 399"
+     d="m 550,321 v 78"
      id="path24" />
   <path
      class="flow"
-     d="M 550 481 V 533"
+     d="m 550,481 v 52"
      id="path25" />
   <path
      class="flow"
-     d="M 550 615 V 633"
+     d="m 550,615 v 18"
      id="path26" />
   <path
      class="flow"
-     d="M 372 674 H 420"
+     d="m 372,674 h 48"
      id="path27" />
   <path
      class="flow"
-     d="M 550 715 V 813"
+     d="m 550,715 v 98"
      id="path28" />
   <path
      class="flow"
-     d="M 550 895 V 1014 H 800"
+     d="m 550,895 v 119 h 250"
      id="path29" />
   <g
      id="encoder-0"
-     data-shape="B,16,400,400">
+     data-shape="B,16,600,600">
     <rect
        x="420"
        y="239"
@@ -340,11 +350,11 @@
        x="550"
        y="304"
        class="block-tensor"
-       id="text30">[B, 16, 400, 400]</text>
+       id="text30">[B, 16, 600, 600]</text>
   </g>
   <g
      id="encoder-1"
-     data-shape="B,32,200,200">
+     data-shape="B,32,300,300">
     <rect
        x="420"
        y="399"
@@ -362,11 +372,11 @@
        x="550"
        y="464"
        class="block-tensor"
-       id="text32">[B, 32, 200, 200]</text>
+       id="text32">[B, 32, 300, 300]</text>
   </g>
   <g
      id="encoder-2-pre-fusion"
-     data-shape="B,32,100,100">
+     data-shape="B,32,150,150">
     <rect
        x="420"
        y="533"
@@ -384,12 +394,12 @@
        x="550"
        y="598"
        class="block-tensor"
-       id="text34">[B, 32, 100, 100]</text>
+       id="text34">[B, 32, 150, 150]</text>
   </g>
   <g
      id="fusion"
      data-input-channels="57"
-     data-shape="B,64,100,100">
+     data-shape="B,64,150,150">
     <rect
        x="420"
        y="633"
@@ -403,7 +413,7 @@
     <text
        x="550"
        y="658"
-       font-size="22"
+       font-size="22px"
        font-weight="650"
        text-anchor="middle"
        fill="#705019"
@@ -411,7 +421,7 @@
     <text
        x="550"
        y="682"
-       font-size="17"
+       font-size="17px"
        text-anchor="middle"
        fill="#856939"
        id="text36">Concat → residual block</text>
@@ -421,11 +431,11 @@
        class="tensor"
        text-anchor="middle"
        fill="#705019"
-       id="text37">[B, 64, 100, 100]</text>
+       id="text37">[B, 64, 150, 150]</text>
   </g>
   <g
      id="encoder-3"
-     data-shape="B,128,50,50">
+     data-shape="B,128,75,75">
     <rect
        x="420"
        y="813"
@@ -443,7 +453,7 @@
        x="550"
        y="878"
        class="block-tensor"
-       id="text39">[B, 128, 50, 50]</text>
+       id="text39">[B, 128, 75, 75]</text>
   </g>
   <text
      x="566"
@@ -467,7 +477,7 @@
      id="text43">stride 2</text>
   <g
      id="bottleneck"
-     data-shape="B,256,25,25">
+     data-shape="B,256,38,38">
     <rect
        x="800"
        y="972"
@@ -487,33 +497,32 @@
        x="935"
        y="1038"
        class="block-tensor"
-       id="text45">[B, 256, 25, 25]</text>
+       id="text45">[B, 256, 38, 38]</text>
   </g>
-  <!-- All skips originate at block outputs; Skip 2 is AFTER fusion. -->
   <path
      id="skip-0"
      class="skip"
      data-from="encoder-0"
      data-to="concat-0"
-     d="M 680 280 H 850" />
+     d="M 680,280 H 850" />
   <path
      id="skip-1"
      class="skip"
      data-from="encoder-1"
      data-to="concat-1"
-     d="M 680 440 H 850" />
+     d="M 680,440 H 850" />
   <path
      id="skip-2"
      class="skip"
      data-from="fusion"
      data-to="concat-2"
-     d="M 680 674 H 850" />
+     d="M 680,674 H 850" />
   <path
      id="skip-3"
      class="skip"
      data-from="encoder-3"
      data-to="concat-3"
-     d="M 680 854 H 850" />
+     d="M 680,854 H 850" />
   <text
      x="765"
      y="267"
@@ -534,63 +543,64 @@
      y="841"
      class="skip-label"
      id="text49">Skip 3 · 128 ch</text>
-  <!-- Decoder flow: resize before concat, then stride-1 residual block. -->
   <path
      class="flow"
-     d="M 935 972 V 948"
+     d="M 935,972 V 948"
      id="path49" />
   <path
      class="flow"
-     d="M 935 912 V 886"
+     d="M 935,912 V 886"
      id="path50" />
   <path
      class="flow"
-     d="M 1020 854 H 1130"
+     d="m 1020,854 h 110"
      id="path51" />
   <path
      class="flow"
-     d="M 1279 813 V 792 H 935 V 772"
+     d="M 1279,813 V 792 H 935 v -20"
      id="path52" />
   <path
      class="flow"
-     d="M 935 736 V 706"
+     d="M 935,736 V 706"
      id="path53" />
   <path
      class="flow"
-     d="M 1020 674 H 1130"
+     d="m 1020,674 h 110"
      id="path54" />
   <path
      class="flow"
-     d="M 1279 633 V 590 H 935 V 556"
+     d="M 1279,633 V 590 H 935 v -34"
      id="path55" />
   <path
      class="flow"
-     d="M 935 520 V 472"
+     d="M 935,520 V 472"
      id="path56" />
   <path
      class="flow"
-     d="M 1020 440 H 1130"
+     d="m 1020,440 h 110"
      id="path57" />
   <path
      class="flow"
-     d="M 1279 399 V 390 H 935 V 374"
+     d="m 1279,399 v -9 H 935 v -16"
      id="path58" />
   <path
      class="flow"
-     d="M 935 338 V 312"
+     d="M 935,338 V 312"
      id="path59" />
   <path
      class="flow"
-     d="M 1020 280 H 1130"
+     d="m 1020,280 h 110"
      id="path60" />
   <path
      class="flow"
-     d="M 1279 239 V 212"
+     d="M 1279,239 V 212"
      id="path61" />
   <g
      id="resize-3"
      data-mode="bilinear"
-     data-scale="2">
+     data-from-size="38"
+     data-to-size="75"
+     data-align-corners="false">
     <rect
        x="855"
        y="912"
@@ -604,12 +614,15 @@
        y="936"
        font-size="19"
        text-anchor="middle"
-       id="text61">2× bilinear</text>
+       id="text61"
+       style="font-size:16px">resize to 75×75</text>
   </g>
   <g
      id="resize-2"
      data-mode="bilinear"
-     data-scale="2">
+     data-from-size="75"
+     data-to-size="150"
+     data-align-corners="false">
     <rect
        x="855"
        y="736"
@@ -623,12 +636,15 @@
        y="760"
        font-size="19"
        text-anchor="middle"
-       id="text62">2× bilinear</text>
+       id="text62"
+       style="font-size:16px">resize to 150×150</text>
   </g>
   <g
      id="resize-1"
      data-mode="bilinear"
-     data-scale="2">
+     data-from-size="150"
+     data-to-size="300"
+     data-align-corners="false">
     <rect
        x="855"
        y="520"
@@ -642,12 +658,15 @@
        y="544"
        font-size="19"
        text-anchor="middle"
-       id="text63">2× bilinear</text>
+       id="text63"
+       style="font-size:16px">resize to 300×300</text>
   </g>
   <g
      id="resize-0"
      data-mode="bilinear"
-     data-scale="2">
+     data-from-size="300"
+     data-to-size="600"
+     data-align-corners="false">
     <rect
        x="855"
        y="338"
@@ -661,12 +680,13 @@
        y="362"
        font-size="19"
        text-anchor="middle"
-       id="text64">2× bilinear</text>
+       id="text64"
+       style="font-size:16px">resize to 600×600</text>
   </g>
   <g
      id="concat-3"
      data-input-channels="256,128"
-     data-shape="B,384,50,50">
+     data-shape="B,384,75,75">
     <rect
        x="850"
        y="822"
@@ -678,14 +698,14 @@
     <text
        x="935"
        y="849"
-       font-size="22"
+       font-size="22px"
        font-weight="600"
        text-anchor="middle"
        id="text65">Concat</text>
     <text
        x="935"
        y="874"
-       font-size="18"
+       font-size="18px"
        text-anchor="middle"
        fill="#52697b"
        id="text66">256 + 128 = 384</text>
@@ -693,7 +713,7 @@
   <g
      id="concat-2"
      data-input-channels="128,64"
-     data-shape="B,192,100,100">
+     data-shape="B,192,150,150">
     <rect
        x="850"
        y="642"
@@ -705,14 +725,14 @@
     <text
        x="935"
        y="669"
-       font-size="22"
+       font-size="22px"
        font-weight="600"
        text-anchor="middle"
        id="text67">Concat</text>
     <text
        x="935"
        y="694"
-       font-size="19"
+       font-size="19px"
        text-anchor="middle"
        fill="#52697b"
        id="text68">128 + 64 = 192</text>
@@ -720,7 +740,7 @@
   <g
      id="concat-1"
      data-input-channels="64,32"
-     data-shape="B,96,200,200">
+     data-shape="B,96,300,300">
     <rect
        x="850"
        y="408"
@@ -732,14 +752,14 @@
     <text
        x="935"
        y="435"
-       font-size="22"
+       font-size="22px"
        font-weight="600"
        text-anchor="middle"
        id="text69">Concat</text>
     <text
        x="935"
        y="460"
-       font-size="19"
+       font-size="19px"
        text-anchor="middle"
        fill="#52697b"
        id="text70">64 + 32 = 96</text>
@@ -747,7 +767,7 @@
   <g
      id="concat-0"
      data-input-channels="32,16"
-     data-shape="B,48,400,400">
+     data-shape="B,48,600,600">
     <rect
        x="850"
        y="248"
@@ -759,21 +779,21 @@
     <text
        x="935"
        y="275"
-       font-size="22"
+       font-size="22px"
        font-weight="600"
        text-anchor="middle"
        id="text71">Concat</text>
     <text
        x="935"
        y="300"
-       font-size="19"
+       font-size="19px"
        text-anchor="middle"
        fill="#52697b"
        id="text72">32 + 16 = 48</text>
   </g>
   <g
      id="decoder-3"
-     data-shape="B,128,50,50">
+     data-shape="B,128,75,75">
     <rect
        x="1130"
        y="813"
@@ -791,11 +811,11 @@
        x="1279"
        y="878"
        class="block-tensor"
-       id="text74">[B, 128, 50, 50]</text>
+       id="text74">[B, 128, 75, 75]</text>
   </g>
   <g
      id="decoder-2"
-     data-shape="B,64,100,100">
+     data-shape="B,64,150,150">
     <rect
        x="1130"
        y="633"
@@ -813,11 +833,11 @@
        x="1279"
        y="698"
        class="block-tensor"
-       id="text76">[B, 64, 100, 100]</text>
+       id="text76">[B, 64, 150, 150]</text>
   </g>
   <g
      id="decoder-1"
-     data-shape="B,32,200,200">
+     data-shape="B,32,300,300">
     <rect
        x="1130"
        y="399"
@@ -835,11 +855,11 @@
        x="1279"
        y="464"
        class="block-tensor"
-       id="text78">[B, 32, 200, 200]</text>
+       id="text78">[B, 32, 300, 300]</text>
   </g>
   <g
      id="decoder-0"
-     data-shape="B,16,400,400">
+     data-shape="B,16,600,600">
     <rect
        x="1130"
        y="239"
@@ -857,69 +877,59 @@
        x="1279"
        y="304"
        class="block-tensor"
-       id="text80">[B, 16, 400, 400]</text>
+       id="text80">[B, 16, 600, 600]</text>
   </g>
   <g
      id="probability-output"
-     data-shape="B,10,400,400">
+     data-shape="B,10,400,400"
+     data-head-shape="B,10,600,600"
+     data-crop="100:500,100:500">
     <rect
-       x="1130"
+       x="1090"
        y="121"
-       width="298"
+       width="338"
        height="91"
        rx="11"
        fill="#e7f4ed"
        stroke="#99bfab"
        stroke-width="1.5"
-       id="rect80" />
+       id="rect4" />
     <text
-       x="1279"
-       y="146"
-       font-size="20"
-       font-weight="650"
+       x="1259"
+       y="140"
        text-anchor="middle"
-       fill="#285d46"
-       id="text81">1×1 conv → sigmoid</text>
+       style="font-weight:600;font-size:17px;fill:#285d46"
+       id="text24">1×1 conv → logits [B,10,600,600]</text>
     <text
-       x="1279"
-       y="174"
-       font-size="20"
-       font-weight="650"
+       x="1259"
+       y="162"
        text-anchor="middle"
-       fill="#285d46"
-       id="text82">P(clear): [B,10,400,400]</text>
+       style="font-weight:600;font-size:17px;fill:#285d46"
+       id="text25">Central crop [100:500,100:500]</text>
     <text
-       x="1279"
-       y="200"
-       font-size="18"
+       x="1259"
+       y="183"
        text-anchor="middle"
-       fill="#426b57"
-       id="text83">+1 … +10 h · 500 m</text>
+       style="font-weight:600;font-size:19px;fill:#285d46"
+       id="text26">Sigmoid → P(clear)</text>
+    <text
+       x="1259"
+       y="204"
+       text-anchor="middle"
+       style="font-weight:600;font-size:18px;fill:#285d46"
+       id="text27">[B,10,400,400] · +1 … +10 h</text>
   </g>
   <path
-     d="M 32 1081 H 1428"
+     d="M 32,1069.5647 H 1428"
      stroke="#e2e9ef"
      id="path83" />
-  <text
-     x="32"
-     y="1111"
-     font-size="18"
-     fill="#52697b"
-     id="text84">Encoder / decoder blocks are residual. Decoder concatenation follows bilinear upsampling.</text>
-  <text
-     x="32"
-     y="1137"
-     font-size="17"
-     fill="#60788a"
-     id="text85">Tensor order: [B, C, H, W] · t = forecast issuance · solar cosine = cos(solar zenith) · 0 = cloudy, 1 = clear</text>
-  <text
-     xml:space="preserve"
-     style="writing-mode:lr-tb;direction:ltr;fill:#afe9af"
-     x="-65.416321"
-     y="208.57378"
-     id="text86"><tspan
-       sodipodi:role="line"
-       id="tspan85"
-       x="-65.416321"
-       y="208.57378">t</tspan></text>
+  <metadata
+     id="metadata94">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:title>Fogcast Model I: expanded-context residual U-Net and three-seed probability blend</dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
 </svg>

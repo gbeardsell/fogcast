@@ -12,3 +12,7 @@ src/fogcast.egg-info/SOURCES.txt
 src/fogcast.egg-info/dependency_links.txt
 src/fogcast.egg-info/requires.txt
 src/fogcast.egg-info/top_level.txt
+src/fogcast/data/NOTICE.md
+src/fogcast/data/bay_area_base.png
+src/fogcast/data/bay_area_labels.png
+src/fogcast/data/map_manifest.json
