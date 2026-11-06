@@ -1,14 +1,13 @@
 """Model I bundle, probability averaging, and complete offline output checks."""
-from argparse import Namespace
 import json
+from argparse import Namespace
 
 import numpy as np
 import pytest
 import torch
 
 from fogcast import forecast
-from fogcast.dataset import ArrayForecastDataset
-from fogcast.dataset import forecast_collate
+from fogcast.dataset import ArrayForecastDataset, forecast_collate
 from fogcast.losses import forecast_loss
 
 

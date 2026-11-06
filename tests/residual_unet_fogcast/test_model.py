@@ -1,7 +1,9 @@
 import pytest
 import torch
 from torch import nn
-from fogcast import ResidualUNet, ResidualBlock2d
+
+from fogcast import ResidualBlock2d, ResidualUNet
+
 
 def test_real_architecture_full_grid_forward_and_backward():
     previous = torch.get_num_threads()

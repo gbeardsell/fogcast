@@ -1,9 +1,9 @@
 """Run both public example scripts through their real CLI in offline fixtures."""
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest

@@ -2,7 +2,7 @@
 import sys
 from pathlib import Path
 
-from residual_unet_fogcast.forecast import main
+from fogcast.forecast import main
 
 if __name__ == "__main__":
     root = Path(__file__).resolve().parents[1]

@@ -1,7 +1,10 @@
 import math
+
 import pytest
 import torch
-from fogcast.residual_unet_fogcast import forecast_loss, stable_probability_pool
+
+from fogcast import forecast_loss, stable_probability_pool
+
 
 def native(cols=(0, 1), weights=(0.25, 0.75), shape=(1, 2)):
     return {'fine_shape': shape, 'row_indices': torch.zeros(len(cols), dtype=torch.long), 'col_indices': torch.tensor(cols), 'weights': torch.tensor(weights)}
