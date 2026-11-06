@@ -62,6 +62,9 @@ This fetches current GOES-18 visible-band and cloud-mask observations and NOAA
 National Blend of Models (NBM) cloud-cover forecasts from the internet. It uses
 the current whole UTC hour as its issue time and predicts the following ten hours.
 
+The example stores downloaded NBM files in `outputs/cache/nbm/` inside the
+project. Use `--cache-dir` to choose another location.
+
 Open `outputs/current/forecast.png` to see the forecast. If NOAA inputs are
 unavailable, the command explains the failure.
 

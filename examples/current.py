@@ -12,5 +12,6 @@ if __name__ == "__main__":
     main([
         "--assets", str(ROOT / "assets/model-i"),
         "--output", str(ROOT / "outputs/current"),
+        "--cache-dir", str(ROOT / "outputs/cache/nbm"),
         *sys.argv[1:],
     ])
