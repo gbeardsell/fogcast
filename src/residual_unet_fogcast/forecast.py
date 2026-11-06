@@ -12,8 +12,9 @@ import hashlib
 import json
 import os
 import subprocess
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -21,6 +22,15 @@ import torch
 from .dataset import ArrayForecastDataset, SolarGeometry, processed_b2, utc
 from .model import ResidualUNet
 from .sources import DownloadBudget, GoesCatalog, fetch_nbm, read_scan
+
+MODEL_MEMBERS: list[dict[str, Any]] = [
+    {"seed": 42, "selected_epoch": 21, "file": "model-seed42.pt",
+     "source_checkpoint_sha256": "a351647b66add69172ac8c9fd2d6c59166829a29c00ac854370667476bb06bf6"},
+    {"seed": 43, "selected_epoch": 30, "file": "model-seed43.pt",
+     "source_checkpoint_sha256": "b57718cec96eefd26c8798f65ba261447e73c16fbd72faa3cce89878d10780cc"},
+    {"seed": 44, "selected_epoch": 28, "file": "model-seed44.pt",
+     "source_checkpoint_sha256": "88caa296c43e3c693b0f135ebe7d20fb6a7c59d4f70649a193f5cb0fa7872b2c"},
+]
 
 
 def sha256(path):
@@ -50,21 +60,23 @@ class InferenceAssets:
         """
         directory = Path(directory)
         self.manifest = json.loads((directory / "manifest.json").read_text())
-        if self.manifest.get("schema") != "fogcast-baseline-inference-v1":
+        if self.manifest.get("schema") != "fogcast-model-i-inference-v1":
             raise ValueError("unsupported inference bundle schema")
+        if self.manifest.get("members") != MODEL_MEMBERS:
+            raise ValueError("bundle must contain Model I seeds 42/43/44 at epochs 21/30/28")
         if self.manifest.get("shortcut_downsampling", "avg_pool") != "avg_pool":
             raise ValueError("the public model requires average-pooling shortcuts")
-        for name in ("model.pt", "preprocessing.npz"):
+        for name in ("preprocessing.npz", *(member["file"] for member in MODEL_MEMBERS)):
             spec = self.manifest["files"][name]
             path = directory / name
             if path.stat().st_size != spec["bytes"] or sha256(path) != spec["sha256"]:
                 raise ValueError("model bundle checksum differs: " + name)
         with np.load(directory / "preprocessing.npz", allow_pickle=False) as data:
             self.arrays = {name: data[name].copy() for name in data.files}
-        expected = {"reference_coefficients": (400, 400, 11), "offsets": (160000,),
-            "eligible_offsets": (160000,), "classifier_coefficients": (4,),
-            "classifier_k": (), "land_fraction": (400, 400),
-            "elevation_normalized": (400, 400), "latitude": (400, 400), "longitude": (400, 400)}
+        expected = {"reference_coefficients": (600, 600, 11), "offsets": (360000,),
+            "eligible_offsets": (360000,), "classifier_coefficients": (4,),
+            "classifier_k": (), "land_fraction": (600, 600),
+            "elevation_normalized": (600, 600), "latitude": (600, 600), "longitude": (600, 600)}
 
         if set(self.arrays) != set(expected):
             raise ValueError("unexpected preprocessing bundle fields")
@@ -79,23 +91,28 @@ class InferenceAssets:
             raise ValueError("invalid frozen local classifier")
 
         torch.set_num_threads(threads)
-        self.model = ResidualUNet()
-        self.model.load_state_dict(torch.load(directory / "model.pt", map_location = "cpu", weights_only = True), strict=True)
-        self.model.requires_grad_(False).eval()
+        self.models = []
+        for member in MODEL_MEMBERS:
+            model = ResidualUNet()
+            model.load_state_dict(torch.load(directory / member["file"], map_location="cpu", weights_only=True), strict=True)
+            self.models.append(model.requires_grad_(False).eval())
         self.solar = SolarGeometry(self.arrays["latitude"], self.arrays["longitude"])
 
     def predict(self, sample):
         """Predict one prepared dataset item as ten P(clear) maps.
         
-        ``sample`` contains unbatched CPU tensors ``x_fine`` [5, 400, 400] and
-        ``x_coarse`` [25, 100, 100]. The returned NumPy array is float32 with shape
+        ``sample`` contains unbatched CPU tensors ``x_fine`` [5, 600, 600] and
+        ``x_coarse`` [25, 150, 150]. The returned NumPy array is float32 with shape
         [10, 400, 400], ordered +1h through +10h. No target labels are needed;
         unexpected output shape or nonfinite probabilities raise ``ValueError``.
         """
         with torch.inference_mode():
-            # The [none] adds a batch dimension, because the model expects a batch even when predicting one sample.
-            logits = self.model(sample["x_fine"][None], sample["x_coarse"][None])
-            probabilities = logits.float().sigmoid()[0].numpy()
+            # Match production: sigmoid each member, then average probabilities.
+            total = torch.zeros((1, 10, 400, 400), dtype=torch.float64)
+            for model in self.models:
+                logits = model(sample["x_fine"][None], sample["x_coarse"][None])
+                total += logits.float().sigmoid().double()
+            probabilities = (total / 3).float()[0].numpy()
             if probabilities.shape != (10,400,400) or not np.isfinite(probabilities).all():
                 raise ValueError("model must produce ten finite probability maps")
         return probabilities
@@ -119,11 +136,11 @@ def prepare_current(issue, assets, cache, budget):
     catalog = GoesCatalog(budget)
     csm_scan = catalog.select(issue, "ABI-L2-ACMC")
     if csm_scan is None:
-        raise RuntimeError("no completed GOES-18 CSM scan within six minutes before the issue time")
+        raise RuntimeError("no completed GOES-18 CSM scan within twenty minutes before the issue time")
     csm, csm_valid, csm_proof = read_scan(csm_scan, assets.arrays, budget)
     b2_scan = catalog.select(issue, "ABI-L1b-RadC", band=2)
     b2_proof, b2_time = None, None
-    score, valid = np.full((400, 400), .5, np.float32), np.zeros((400, 400), bool)
+    score, valid = np.full((600, 600), .5, np.float32), np.zeros((600, 600), bool)
 
     # At night there is no visible-band signal. Keep the neutral input/mask.
     if b2_scan is not None and np.any(assets.solar.solar_geometry(b2_scan.midpoint)[0] > 0):
@@ -239,7 +256,8 @@ def run(args):
     times = [(issue + timedelta(hours=h)).isoformat() for h in range(1, 11)]
     _atomic_npz(output / "forecast.npz", clear_probability=probabilities,
                 x_m=450250 + np.arange(400) * 500, y_m=4080250 + np.arange(400) * 500,
-                latitude=assets.arrays["latitude"], longitude=assets.arrays["longitude"],
+                latitude=assets.arrays["latitude"][100:500, 100:500],
+                longitude=assets.arrays["longitude"][100:500, 100:500],
                 issue_time=np.array(issue.isoformat()), valid_times=np.asarray(times))
     _atomic_npz(output / "inputs.npz", **sample, provenance_json=np.array(json.dumps(provenance)))
     preview(output / "forecast.png", probabilities, issue) 
@@ -247,8 +265,8 @@ def run(args):
         "model": {k: v for k, v in assets.manifest.items() if k != "files"},
         "asset_files": assets.manifest["files"], "provenance": provenance,
         "grid": {"epsg": 32610, "bounds_m": [450000, 4080000, 650000, 4280000], "spacing_m": 500, "row_order": "south_up"},
-        "support": {"current_b2_valid_pixels": int(item["x_fine"][1].sum()),
-                    "current_csm_valid_pixels": int(item["x_coarse"][24].sum())},
+        "support": {"current_b2_valid_pixels": int(item["x_fine"][1, 100:500, 100:500].sum()),
+                    "current_csm_valid_pixels": int(item["x_coarse"][24, 25:125, 25:125].sum())},
         "download": {"response_bytes": budget.response_bytes, "requests": budget.requests},
         "files": {name:{"sha256": sha256(output/name), "bytes": (output/name).stat().st_size}
             for name in ("forecast.npz", "inputs.npz", "forecast.png")}}

@@ -262,15 +262,15 @@ class GoesCatalog:
         """Select the freshest eligible scan, or ``None`` when none qualifies.
 
         Scan end and file creation must be no later than issue; the acquisition
-        midpoint must be at most six minutes old. Listings cover the hours
-        containing issue +/- 15 minutes. Equal midpoints prefer later creation
+        midpoint must be at most twenty minutes old. Listings cover the hours
+        containing issue +/- 20 minutes. Equal midpoints prefer later creation
         times, and ``band`` optionally restricts channel-specific products.
         """
         issue = utc(issue)
-        hours = {(issue + timedelta(minutes=n)).replace(minute=0, second=0, microsecond=0) for n in (-15, 15)}
+        hours = {(issue + timedelta(minutes=n)).replace(minute=0, second=0, microsecond=0) for n in (-20, 20)}
         eligible = [s for hour in sorted(hours) for s in self.hour(product, hour)
                     if (band is None or s.band == band) and s.scan_end <= issue and s.created <= issue
-                    and 0 <= (issue - s.midpoint).total_seconds() <= 360]
+                    and 0 <= (issue - s.midpoint).total_seconds() <= 1200]
         return min(eligible, key=lambda s: ((issue - s.midpoint).total_seconds(), -s.created.timestamp()), default=None)
 
 
@@ -590,9 +590,9 @@ def native_grid(geometry):
     """Build a padded NBM crop and conditioning-grid coordinates in its native CRS.
 
     Uses the GRIB's spherical Lambert parameters, not a default Earth ellipsoid.
-    The fixed 400 x 400 UTM domain determines a crop padded by three source
+    The fixed 600 x 600 UTM input determines a crop padded by three source
     cells. Return the geometry/ROI descriptor, cropped x/y axes and transformed
-    target coordinates sampled every fourth pixel (100 x 100).
+    target coordinates sampled every fourth pixel (150 x 150).
     """
     from pyproj import CRS, Transformer
     g = geometry
@@ -601,7 +601,7 @@ def native_grid(geometry):
     geographic = CRS.from_proj4(f"+proj=longlat +R={g['radius']} +no_defs")
     x0, y0 = Transformer.from_crs(geographic, crs, always_xy=True).transform(
         g["longitudeOfFirstGridPointInDegrees"], g["latitudeOfFirstGridPointInDegrees"])
-    xx, yy = np.meshgrid(450250 + np.arange(400) * 500, 4080250 + np.arange(400) * 500)
+    xx, yy = np.meshgrid(400250 + np.arange(600) * 500, 4030250 + np.arange(600) * 500)
     tx, ty = Transformer.from_crs(32610, crs, always_xy=True).transform(xx, yy)
     ix, iy = (tx - x0) / g["DxInMetres"], (ty - y0) / g["DyInMetres"]
     cols = [max(0, int(np.floor(ix.min())) - 3), min(g["Nx"], int(np.ceil(ix.max())) + 4)]
@@ -612,7 +612,7 @@ def native_grid(geometry):
 
 
 def fetch_nbm(issue, cache, budget):
-    """Return eleven float32 cloud-cover maps [11, 100, 100] and provenance.
+    """Return eleven float32 cloud-cover maps [11, 150, 150] and provenance.
 
     ``issue`` is a UTC hour boundary. Try cycles two, three, then four hours
     earlier, selecting leads that cover issue through +10h from one cycle.
@@ -650,7 +650,7 @@ def fetch_nbm(issue, cache, budget):
         probe = run_worker()
 
         if not isinstance(probe, dict):
-            raise ValueError("NBM decoder returned no probe metadata")  # noqa: TRY004
+            raise ValueError("NBM decoder returned no probe metadata")
         grid, x, y, tx, ty = native_grid(probe["geometry"])
         job.update(mode="decode", grid=grid)
         run_worker()
@@ -659,7 +659,7 @@ def fetch_nbm(issue, cache, budget):
         with np.load(job["output"], allow_pickle=False) as native:
             for values, valid in zip(native["values"], native["valid"]):
                 data = np.where(valid, values.astype(np.float32) / 100, 0)
-                mapped = RegularGridInterpolator((y, x), data, bounds_error=False, fill_value=0)(points).reshape(100, 100)
+                mapped = RegularGridInterpolator((y, x), data, bounds_error=False, fill_value=0)(points).reshape(150, 150)
                 coverage = RegularGridInterpolator((y, x), valid.astype(float), bounds_error=False, fill_value=0)(points)
                 if not (coverage >= 1 - 1e-7).all(): raise ValueError("incomplete NBM conditioning grid")
                 fields.append(mapped.astype(np.float32))

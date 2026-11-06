@@ -1,0 +1,72 @@
+{
+  "schema": "fogcast-model-i-inference-v1",
+  "model": "I",
+  "members": [
+    {
+      "seed": 42,
+      "selected_epoch": 21,
+      "file": "model-seed42.pt",
+      "source_checkpoint_sha256": "a351647b66add69172ac8c9fd2d6c59166829a29c00ac854370667476bb06bf6"
+    },
+    {
+      "seed": 43,
+      "selected_epoch": 30,
+      "file": "model-seed43.pt",
+      "source_checkpoint_sha256": "b57718cec96eefd26c8798f65ba261447e73c16fbd72faa3cce89878d10780cc"
+    },
+    {
+      "seed": 44,
+      "selected_epoch": 28,
+      "file": "model-seed44.pt",
+      "source_checkpoint_sha256": "88caa296c43e3c693b0f135ebe7d20fb6a7c59d4f70649a193f5cb0fa7872b2c"
+    }
+  ],
+  "ensemble_sha256": "0c89f1b0c64484f1c6a515e7861e1deece93db0fe2368c00b7457030639ce431",
+  "aggregation": "equal_arithmetic_mean_unthresholded_probabilities_before_native_pooling",
+  "shortcut_downsampling": "avg_pool",
+  "input_shape": [
+    600,
+    600
+  ],
+  "output_shape": [
+    400,
+    400
+  ],
+  "input_bounds_m": [
+    400000,
+    4030000,
+    700000,
+    4330000
+  ],
+  "output_bounds_m": [
+    450000,
+    4080000,
+    650000,
+    4280000
+  ],
+  "preprocessing_procedure": "minute_utc_leap_year_v1",
+  "source_preprocessing_sha256": "63bdc73f87c0a9a2787a201c8e94457de90384d82d061d1698d8fe4bba41c37d",
+  "source_geography_sha256": "6791e4e5a30b00b7b60b4108c58d9dfff3f1f834f85dfad3e1c04cc5176af45f",
+  "elevation_normalization": {
+    "mean_m": 106.30996328562388,
+    "std_m": 191.83128278958986
+  },
+  "files": {
+    "preprocessing.npz": {
+      "bytes": 37897517,
+      "sha256": "29f9b03f56b3b49124f18a3a6837e4a959ade95ed8a6041517e4a755a9dbf9c9"
+    },
+    "model-seed42.pt": {
+      "bytes": 8470329,
+      "sha256": "3c8e4e8e3d2d3215b5b22f0a2a665e1f07e3dac185e94a18b8fd0fdb93ece9bc"
+    },
+    "model-seed43.pt": {
+      "bytes": 8470329,
+      "sha256": "b811eb22d9d25796ea4ad254bfae7379c59b62249d971096bf9bc4a479e02103"
+    },
+    "model-seed44.pt": {
+      "bytes": 8470329,
+      "sha256": "88b2277227ff59fc1aa8385145dabd60418a234c8c6e9b286ed49a051696213f"
+    }
+  }
+}

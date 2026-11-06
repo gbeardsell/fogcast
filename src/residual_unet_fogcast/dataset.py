@@ -276,16 +276,18 @@ class ArrayForecastDataset(Dataset):
         if land.ndim != 2 or any(size <= 0 or size % 4 for size in land.shape):
             raise ValueError("fine grid must be two-dimensional with positive sizes divisible by four")
         shape = land.shape
-        if self.native_geometry is not None and shape != self.native_geometry["fine_shape"]:
+        # Model I sees a 50 km halo; labels supervise the central forecast only.
+        label_shape = (400, 400) if shape == (600, 600) else shape
+        if self.native_geometry is not None and label_shape != self.native_geometry["fine_shape"]:
             raise ValueError("native geometry fine_shape must match the sample grid")
         cond_shape = (shape[0] // 4, shape[1] // 4)
-        target_shape = (HORIZONS, *shape)
+        target_shape = (HORIZONS, *label_shape)
         _check_values(land, "land_fraction")
         elevation = _array(sample["elevation_normalized"], "elevation_normalized", shape)
         _check_values(elevation, "elevation_normalized", low=None, high=None)
         current_solar = _array(sample["current_solar_cosine"], "current_solar_cosine", shape)
         _check_values(current_solar, "current_solar_cosine", low=-1)
-        future_solar = _array(sample["target_solar_cosine"], "target_solar_cosine", target_shape)
+        future_solar = _array(sample["target_solar_cosine"], "target_solar_cosine", (HORIZONS, *shape))
         _check_values(future_solar, "target_solar_cosine", low=-1)
         nbm = _array(sample["nbm_cloud_cover"], "nbm_cloud_cover", (11, *cond_shape))
         _check_values(nbm, "nbm_cloud_cover")
@@ -303,7 +305,10 @@ class ArrayForecastDataset(Dataset):
         valid = _mask(sample.get("valid_fine", np.zeros(target_shape, bool)), "valid_fine", target_shape)
         target = _array(sample.get("target_fine", np.zeros(target_shape, np.float32)), "target_fine", target_shape)
         _check_values(target, "fine targets", valid=valid, binary=self.fine_target_mode == "hard")
-        coarse_supervision = np.asarray((future_solar < NIGHT_SOLAR_THRESHOLD).all(axis=(1, 2)))
+        label_solar = future_solar[:, 100:500, 100:500] if shape == (600, 600) else future_solar
+        coarse_supervision = np.asarray(
+            (label_solar < NIGHT_SOLAR_THRESHOLD).all(axis=(1, 2)), dtype=np.bool_
+        )
         valid = valid & ~coarse_supervision[:, None, None]
         target = np.where(valid, target, np.float32(0))
 

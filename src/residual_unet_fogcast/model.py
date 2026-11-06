@@ -29,7 +29,8 @@ class ResidualBlock2d(nn.Module):
         return self.activation(self.main(x) + self.shortcut(x))
 
 class ResidualUNet(nn.Module):
-    model_version = "fogcast_nbm_resunet_v2"
+    """One Model I member: a 300 km input and central 200 km forecast."""
+    model_version = "fogcast_model_i_expanded_context_resunet_v2"
     fine_channels = 5
     coarse_channels = 25
     horizons = 10
@@ -72,7 +73,7 @@ class ResidualUNet(nn.Module):
         d2 = self._decode(d3, e2, self.dec2)
         d1 = self._decode(d2, e1, self.dec1)
         d0 = self._decode(d1, e0, self.dec0)
-        return self.head(d0)
+        return self.head(d0)[..., 100:500, 100:500].contiguous()
 
 
             
