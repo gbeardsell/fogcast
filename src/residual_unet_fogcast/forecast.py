@@ -1,7 +1,7 @@
 """Load a trained bundle, prepare inputs, and produce a ten-hour forecast.
 
 Both fetched NOAA observations (for current forecast) and saved arrays (historical data)
-pass through ArrayForecastDataset and the same NBMResidualUNet.
+pass through ArrayForecastDataset and the same ResidualUNet.
 This module owns the command and output artifacts.
 """
 
@@ -12,14 +12,14 @@ import hashlib
 import json
 import os
 import subprocess
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
 import torch
 
 from .dataset import ArrayForecastDataset, SolarGeometry, processed_b2, utc
-from .model import NBMResidualUNet
+from .model import ResidualUNet
 from .sources import DownloadBudget, GoesCatalog, fetch_nbm, read_scan
 
 
@@ -49,13 +49,13 @@ class InferenceAssets:
         thread count. Invalid bundles raise before prediction can begin.
         """
         directory = Path(directory)
-        self.manifest = json.loads((directory / "manifests.json").read_text())
-        if self.manifest.get("schema") != "fogcasts-baseline-inference-v1":
+        self.manifest = json.loads((directory / "manifest.json").read_text())
+        if self.manifest.get("schema") != "fogcast-baseline-inference-v1":
             raise ValueError("unsupported inference bundle schema")
         if self.manifest.get("shortcut_downsampling", "avg_pool") != "avg_pool":
             raise ValueError("the public model requires average-pooling shortcuts")
         for name in ("model.pt", "preprocessing.npz"):
-            spec = self.manifest(["files"][name])
+            spec = self.manifest["files"][name]
             path = directory / name
             if path.stat().st_size != spec["bytes"] or sha256(path) != spec["sha256"]:
                 raise ValueError("model bundle checksum differs: " + name)
@@ -78,11 +78,11 @@ class InferenceAssets:
                 or float(self.arrays["classifier_k"]) <= 0):
             raise ValueError("invalid frozen local classifier")
 
-        torch.set_num_threads = threads
-        self.model = NBMResidualUNet(current_b2_input="continuous_clear_score")
+        torch.set_num_threads(threads)
+        self.model = ResidualUNet()
         self.model.load_state_dict(torch.load(directory / "model.pt", map_location = "cpu", weights_only = True), strict=True)
         self.model.requires_grad_(False).eval()
-        self.solar = SolarGeometry(self.arrays["latitute"], self.arrays["longitude"])
+        self.solar = SolarGeometry(self.arrays["latitude"], self.arrays["longitude"])
 
     def predict(self, sample):
         """Predict one prepared dataset item as ten P(clear) maps.
@@ -126,7 +126,7 @@ def prepare_current(issue, assets, cache, budget):
     score, valid = np.full((400, 400), .5, np.float32), np.zeros((400, 400), bool)
 
     # At night there is no visible-band signal. Keep the neutral input/mask.
-    if b2_scan is not None and np.any(assets.solar.cosine(b2_scan.midpoint) > 0):
+    if b2_scan is not None and np.any(assets.solar.solar_geometry(b2_scan.midpoint)[0] > 0):
         raw, raw_valid, b2_proof = read_scan(b2_scan, assets.arrays, budget, b2=True)
         b2_time = b2_scan.midpoint
         score, valid, _ = processed_b2(raw, raw_valid, b2_time, assets.arrays, assets.solar)
@@ -134,12 +134,13 @@ def prepare_current(issue, assets, cache, budget):
     # Reference time uses b2_time if available; otherwise, the CSM scan’s midpoint.
     reference_time = b2_time or csm_scan.midpoint
     arrays = assets.arrays
+    nbm, nbm_proof = fetch_nbm(issue, cache, budget)
     sample = {"issue_time": issue.isoformat(), "land_fraction": arrays["land_fraction"],
                     "elevation_normalized": arrays["elevation_normalized"],
                     "current_b2_score": score, "current_b2_valid": valid,
                     "current_csm": np.where(csm_valid, csm, .5).astype(np.float32), "current_csm_valid": csm_valid,
-                    "current_solar_cosine": assets.solar.cosine(reference_time), "nbm_cloud_cover": nbm,
-                    "target_solar_cosine": np.stack([assets.solar.cosine(issue + timedelta(hours=h)) for h in range(1, 11)])}
+                    "current_solar_cosine": assets.solar.solar_geometry(reference_time)[0], "nbm_cloud_cover": nbm,
+                    "target_solar_cosine": np.stack([assets.solar.solar_geometry(issue + timedelta(hours=h))[0] for h in range(1, 11)])}
     provenance = {"b2": b2_proof, "csm": csm_proof, "nbm": nbm_proof,
                         "current_solar_time": reference_time.isoformat(), "input_mode": "live_noaa"}
     return sample, provenance
@@ -230,32 +231,33 @@ def run(args):
         if sum(p.stat().st_size for p in cache.rglob("*") if p.is_file()) > 256 * 1024**2:
             raise RuntimeError("cache exceeds 256 MiB; choose a fresh cache directory")
         sample, provenance = prepare_current(issue, assets, cache, budget)
-        item = ArrayForecastDataset([sample])[0]
-        probabilities = assets.predict(item)
-        budget.remaining()
-        budget.remaining()
-        output.mkdir(parents=True, exist_ok=True)
-        times = [(issue + timedelta(hours=h)).isoformat() for h in range(1, 11)]
-        _atomic_npz(output / "forecast.npz", clear_probability=probabilities,
-                    x_m=450250 + np.arange(400) * 500, y_m=4080250 + np.arange(400) * 500,
-                    latitude=assets.arrays["latitude"], longitude=assets.arrays["longitude"],
-                    issue_time=np.array(issue.isoformat()), valid_times=np.asarray(times))
-        _atomic_npz(output / "inputs.npz", **sample, provenance_json=np.array(json.dumps(provenance)))
-        record = {"schema": "fogcast-current-forecast-v1", "issue_time": issue.isoformat(), "valid_times": times,
-            "model": {k: v for k, v in assets.manifest.items() if k != "files"},
-            "asset_files": assets.manifest["files"], "provenance": provenance,
-            "grid": {"epsg": 32610, "bounds_m": [450000, 4080000, 650000, 4280000], "spacing_m": 500, "row_order": "south_up"},
-            "support": {"current_b2_valid_pixels": int(item["x_fine"][1].sum()),
-                        "current_csm_valid_pixels": int(item["x_coarse"][24].sum())},
-            "download": {"response_bytes": budget.response_bytes, "requests": budget.requests},
-            "files": {name:{"sha256": sha256(output/name), "bytes": (output/name).stat().st_size}
-                for name in ("forecast.npz", "inputs.npz", "forecast.png")}}
-        temporary = output / "forecast.json.next"
-        temporary.write_text(json.dumps(record, indent=2, allow_nan=False) + "\n")
-        temporary.replace(output / "forecast.json")
-        print(f"Forecast issued {issue.isoformat()}: +1 through +10 hours")
-        print(f"Saved {output / 'forecast.npz'} and {output / 'forecast.png'}")
-        return record
+    item = ArrayForecastDataset([sample])[0]
+    budget.remaining()
+    probabilities = assets.predict(item)
+    budget.remaining()
+    output.mkdir(parents=True, exist_ok=True)
+    times = [(issue + timedelta(hours=h)).isoformat() for h in range(1, 11)]
+    _atomic_npz(output / "forecast.npz", clear_probability=probabilities,
+                x_m=450250 + np.arange(400) * 500, y_m=4080250 + np.arange(400) * 500,
+                latitude=assets.arrays["latitude"], longitude=assets.arrays["longitude"],
+                issue_time=np.array(issue.isoformat()), valid_times=np.asarray(times))
+    _atomic_npz(output / "inputs.npz", **sample, provenance_json=np.array(json.dumps(provenance)))
+    preview(output / "forecast.png", probabilities, issue) 
+    record = {"schema": "fogcast-current-forecast-v1", "issue_time": issue.isoformat(), "valid_times": times,
+        "model": {k: v for k, v in assets.manifest.items() if k != "files"},
+        "asset_files": assets.manifest["files"], "provenance": provenance,
+        "grid": {"epsg": 32610, "bounds_m": [450000, 4080000, 650000, 4280000], "spacing_m": 500, "row_order": "south_up"},
+        "support": {"current_b2_valid_pixels": int(item["x_fine"][1].sum()),
+                    "current_csm_valid_pixels": int(item["x_coarse"][24].sum())},
+        "download": {"response_bytes": budget.response_bytes, "requests": budget.requests},
+        "files": {name:{"sha256": sha256(output/name), "bytes": (output/name).stat().st_size}
+            for name in ("forecast.npz", "inputs.npz", "forecast.png")}}
+    temporary = output / "forecast.json.next"
+    temporary.write_text(json.dumps(record, indent=2, allow_nan=False) + "\n")
+    temporary.replace(output / "forecast.json")
+    print(f"Forecast issued {issue.isoformat()}: +1 through +10 hours")
+    print(f"Saved {output / 'forecast.npz'} and {output / 'forecast.png'}")
+    return record
 
 
 

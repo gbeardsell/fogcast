@@ -13,7 +13,6 @@ from collections.abc import (
 )
 from datetime import UTC, datetime
 from functools import lru_cache
-from operator import index as integer_index
 from typing import Any
 
 import numpy as np
@@ -304,7 +303,7 @@ class ArrayForecastDataset(Dataset):
         valid = _mask(sample.get("valid_fine", np.zeros(target_shape, bool)), "valid_fine", target_shape)
         target = _array(sample.get("target_fine", np.zeros(target_shape, np.float32)), "target_fine", target_shape)
         _check_values(target, "fine targets", valid=valid, binary=self.fine_target_mode == "hard")
-        coarse_supervision = (future_solar < NIGHT_SOLAR_THRESHOLD).all(axis=(1, 2))
+        coarse_supervision = np.asarray((future_solar < NIGHT_SOLAR_THRESHOLD).all(axis=(1, 2)))
         valid = valid & ~coarse_supervision[:, None, None]
         target = np.where(valid, target, np.float32(0))
 
