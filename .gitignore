@@ -1,0 +1,17 @@
+# Virtual environments
+.venv/
+venv/
+
+# Python bytecode, anywhere in the repository
+__pycache__/
+*.py[cod]
+
+# Package metadata and build output
+*.egg-info/
+build/
+dist/
+
+# Tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
