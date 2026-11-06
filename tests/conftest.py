@@ -4,9 +4,8 @@ import json
 import numpy as np
 import pytest
 import torch
-
-from residual_unet_fogcast.forecast import MODEL_MEMBERS, sha256
-from residual_unet_fogcast.model import ResidualUNet
+from fogcast.forecast import MODEL_MEMBERS, sha256
+from fogcast.model import ResidualUNet
 
 
 @pytest.fixture(scope="session")

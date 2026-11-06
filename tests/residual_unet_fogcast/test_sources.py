@@ -87,7 +87,7 @@ def test_nbm_selects_one_surface_deterministic_cloud_field_and_exact_range():
         select_index(index, 150, cycle, 2)
 
 def test_incomplete_nbm_cache_is_preserved_before_any_network_request(tmp_path):
-    from fogcast.residual_unet_fogcast.sources import download_field
+    from fogcast.sources import download_field
     target = tmp_path / 'f002.grib2'
     target.write_bytes(b'preserve the unverified original')
     with pytest.raises(ValueError, match='incomplete'):

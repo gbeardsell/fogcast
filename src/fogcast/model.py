@@ -57,10 +57,10 @@ class ResidualUNet(nn.Module):
         return block(torch.cat((x, skip), dim=1))
 
     def forward(self, x_fine: Tensor, x_coarse: Tensor) -> Tensor:
-        if (x_fine.ndim != 4 or x_fine.shape[1:] != (5,400,400) 
-            or x_coarse.ndim != 4 or x_coarse.shape[1:] != (25,100,100)
+        if (x_fine.ndim != 4 or x_fine.shape[1:] != (5,600,600) 
+            or x_coarse.ndim != 4 or x_coarse.shape[1:] != (25,150,150)
             or x_fine.shape[0] != x_coarse.shape[0]):
-            raise ValueError("expected matched [B,5,400,400] and [B,25,100,100] inputs")
+            raise ValueError("expected matched [B,5,600,600] and [B,25,150,150] inputs")
         if not bool(torch.isfinite(x_fine).all() and torch.isfinite(x_coarse).all()):
             raise ValueError("forecast inputs must be finite; invalid pixels require neutral fill and masks")
         e0 = self.stem(x_fine)
