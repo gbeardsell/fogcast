@@ -4,7 +4,7 @@
 and numerical weather predictions.**
 
 Fogcast predicts the probability of clear skies for the next ten hours on a
-500 m grid. This package includes the **Model I three-seed blend** used for
+500 m grid. This package includes the **Model I three-seed blend** (Model I3) used for
 current forecasts on [fogcast.today](https://fogcast.today), with two runnable
 examples: a historical forecast and a forecast using current NOAA data.
 
@@ -44,8 +44,7 @@ python examples/historical.py
 
 This issues a forecast for **June 14, 2026, at 7:00 a.m. PDT (14:00 UTC)**.
 The ten forecast hours run from 8:00 a.m. to 5:00 p.m. PDT, matching the date and
-issue time of the website's historical example. This rerun uses the three-seed
-blend; the website's retained original June 14 snapshot was generated with seed 42.
+issue time of the website's historical example.
 
 The supplied inputs are actual prepared satellite and NBM data for that issue.
 Once the package and model assets are present, this example works offline.
@@ -58,9 +57,7 @@ Open `outputs/historical/forecast.png` to see all ten forecast maps.
 python examples/current.py
 ```
 
-This fetches current GOES-18 visible-band and cloud-mask observations and NOAA
-National Blend of Models (NBM) cloud-cover forecasts from the internet. It uses
-the current whole UTC hour as its issue time and predicts the following ten hours.
+This fetches the latest GOES-18 visible-band and cloud-mask observations and NOAA National Blend of Models (NBM) cloud-cover forecasts from the internet. It sets the issue time to the current UTC time rounded down to the nearest hour and predicts conditions for the next ten hours.
 
 The example stores downloaded NBM files in `outputs/cache/nbm/` inside the
 project. Use `--cache-dir` to choose another location.
@@ -74,24 +71,21 @@ Each example writes four files:
 
 - `forecast.png`: ten north-up maps styled like fogcast.today, with a dark
   geographic basemap, pale semi-transparent clouds, and place labels above the
-  clouds. Headings show Pacific times, with UTC times below.
+  clouds.
 - `forecast.npz`: ten `clear_probability` arrays, shape `[10, 400, 400]`, plus
   coordinates and UTC issue/valid times. Probabilities range from 0 (cloudy) to 1
-  (clear). Arrays are stored south-up.
+  (clear).
 - `inputs.npz`: the prepared inputs, saved for offline replay.
 - `forecast.json`: model identity, source records, support counts, and checksums.
 
 Results are saved under `outputs/historical/` or `outputs/current/`, depending
 on the example. Probabilities describe clear versus cloudy conditions; the
-model does not separately identify fog types. The 500 m grid spacing does not
-establish the effective resolution of the forecast.
+model does not separately identify fog types.
 
-The PNG uses the website's binary cloud display: a pixel is clear when its
-predicted clear-sky probability is at least 50%; otherwise a cloud layer is drawn
-at approximately 61% opacity. The NPZ retains the original continuous probabilities.
+in the PNG, a pixel is clear when its
+predicted clear-sky probability is at least 50%. The NPZ retains the original continuous probabilities.
 The small map backgrounds are included in the installed package, so rendering
-requires no map downloads. Map attribution appears at the bottom of each PNG;
-source details are in [the map notice](src/fogcast/residual_unet_fogcast/data/NOTICE.md).
+requires no map downloads.
 
 Choose a new output directory when rerunning an example:
 
@@ -100,9 +94,7 @@ python examples/current.py --output outputs/another-current-run
 ```
 
 Both examples also accept `--assets`, `--threads`, `--timeout-seconds`,
-`--maximum-download-mib`, and `--cache-dir`. Downloads default to a 128 MiB
-response-byte allowance and a 600-second deadline. Use a new cache directory if
-the 256 MiB NBM working-cache limit is reached.
+`--maximum-download-mib`, and `--cache-dir`. Downloads default to a 128 MiB limit and a 600-second deadline.
 
 ## How it works
 
@@ -120,10 +112,7 @@ The forecast combines:
 - **Geography:** land fraction and elevation.
 - **Time and illumination:** solar geometry and seasonal information.
 
-During training, B2-derived labels provide fine supervision during daylight.
-Native CSM footprints provide coarse supervision when the entire forecast area
-has solar zenith angles above 82°. One source is selected for each sample and
-forecast target hour.
+During training, B2-derived labels provide fine supervision during daylight, while native CSM footprints provide coarse supervision at night. A single source is selected for each sample and forecast target hour.
 
 ### Model architecture
 
@@ -143,27 +132,20 @@ and using the surrounding input area as context.
 
 ![Fogcast Model I residual U-Net architecture and three-seed probability blend](docs/architecture/residual_unet_fogcast_architecture.svg)
 
-*Figure 1. One Model I member (above) and the three-seed blend (below). Expanded
+*Figure 1. One Model I member. Expanded
 600 × 600 inputs provide a 50 km context margin around the central 400 × 400
-forecast. Each decoder step resizes to its skip connection's exact grid. Each
-member's cropped logits pass through sigmoid before their probabilities are
-averaged. [PNG version](docs/architecture/residual_unet_fogcast_architecture.png).*
+forecast. Each decoder step resizes to its skip connection's exact grid. [PNG version](docs/architecture/residual_unet_fogcast_architecture.png).*
 
-The blend averages the three members' sigmoid probabilities with equal weights,
-accumulating in float64 and returning float32. Selected seeds/epochs are
-**42/21, 43/30, and 44/28**. Model and preprocessing files are checked against
-the accompanying SHA-256 manifest.
+The blend averages the three members' sigmoid probabilities with equal weights.
 
-The public preprocessing uses minute-truncated UTC timestamps and leap-year-aware
-seasonal calculations. Preprocessing coefficients and neural-network weights are
+Preprocessing coefficients and neural-network weights are
 frozen; running an example performs no fitting.
 
 ### Current input availability
 
 Satellite scans must have completed and been created by the issue time, with a
-midpoint no more than 20 minutes earlier. CSM observations are required. Missing
-or fully dark visible-band observations use a neutral score and an invalid mask.
-NBM uses one complete cycle initialized 2–4 hours before the issue time.
+midpoint no more than 20 minutes earlier.
+NBM forecasts uses one complete cycle initialized 2–4 hours before the issue time.
 
 ## Run the tests
 
@@ -183,11 +165,9 @@ downloads. Running `examples/current.py` separately checks actual NOAA retrieval
 For development, use `python -m pip install -e ".[dev,live]"` so source edits
 are reflected without reinstalling the package.
 
-## Project status and further reading
+## Further reading
 
-Fogcast is an active research project. This release includes selected model and
-preprocessing implementations, trained inference assets, tests, and the two
-examples above. Explore forecasts at [fogcast.today](https://fogcast.today).
+Explore forecasts at [fogcast.today](https://fogcast.today).
 
 Five source modules contain the implementation:
 
@@ -198,6 +178,3 @@ Five source modules contain the implementation:
 | [losses.py](src/fogcast/residual_unet_fogcast/losses.py) | Fine/native supervision, pooling, BCE and Brier statistics |
 | [sources.py](src/fogcast/residual_unet_fogcast/sources.py) | NOAA discovery, downloads, projection and GRIB decoding |
 | [forecast.py](src/fogcast/residual_unet_fogcast/forecast.py) | Three-member loading, prediction, output files and CLI |
-
-[CHANGES.xlsx](CHANGES.xlsx) records the file/function inventory, asset checksums,
-and validation evidence from preparation of this public package.
