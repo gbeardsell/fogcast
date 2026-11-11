@@ -145,7 +145,7 @@ frozen; running an example performs no fitting.
 
 Satellite scans must have completed and been created by the issue time, with a
 midpoint no more than 20 minutes earlier.
-NBM forecasts uses one complete cycle initialized 2–4 hours before the issue time.
+NBM inputs uses one complete cycle initialized 2–4 hours before the issue time.
 
 ## Run the tests
 
@@ -168,6 +168,14 @@ are reflected without reinstalling the package.
 ## Further reading
 
 Explore forecasts at [fogcast.today](https://fogcast.today).
+
+Read the five-part [Building Fogcast series](https://gbeardsell.com/writing/):
+
+1. [Before I could forecast the fog, I had to build the labels](https://gbeardsell.com/writing/building-the-labels/)
+2. [From satellite brightness to a cloud mask](https://gbeardsell.com/writing/cloud-classifier/)
+3. [What should a neural network learn when a weather forecast already exists?](https://gbeardsell.com/writing/model-architecture/)
+4. [Which inputs actually help?](https://gbeardsell.com/writing/which-inputs-actually-help/)
+5. [Is the neural network better, or does it just draw pretty maps?](https://gbeardsell.com/writing/does-fogcast-earn-its-detail/)
 
 Five source modules contain the implementation:
 
