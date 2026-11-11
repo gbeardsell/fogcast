@@ -165,6 +165,19 @@ downloads. Running `examples/current.py` separately checks actual NOAA retrieval
 For development, use `python -m pip install -e ".[dev,live]"` so source edits
 are reflected without reinstalling the package.
 
+## Source modules
+
+Five source modules contain the implementation:
+
+| File | Purpose |
+| --- | --- |
+| [model.py](src/fogcast/residual_unet_fogcast/model.py) | Residual U-Net architecture and central output crop |
+| [dataset.py](src/fogcast/residual_unet_fogcast/dataset.py) | Solar geometry, visible-band processing, inputs, targets and collation |
+| [losses.py](src/fogcast/residual_unet_fogcast/losses.py) | Fine/native supervision, pooling, BCE and Brier statistics |
+| [sources.py](src/fogcast/residual_unet_fogcast/sources.py) | NOAA discovery, downloads, projection and GRIB decoding |
+| [forecast.py](src/fogcast/residual_unet_fogcast/forecast.py) | Three-member loading, prediction, output files and CLI |
+
+
 ## Further reading
 
 Explore forecasts at [fogcast.today](https://fogcast.today).
@@ -177,12 +190,3 @@ Read the five-part [Building Fogcast series](https://gbeardsell.com/writing/):
 4. [Which inputs actually help?](https://gbeardsell.com/writing/which-inputs-actually-help/)
 5. [Is the neural network better, or does it just draw pretty maps?](https://gbeardsell.com/writing/does-fogcast-earn-its-detail/)
 
-Five source modules contain the implementation:
-
-| File | Purpose |
-| --- | --- |
-| [model.py](src/fogcast/residual_unet_fogcast/model.py) | Residual U-Net architecture and central output crop |
-| [dataset.py](src/fogcast/residual_unet_fogcast/dataset.py) | Solar geometry, visible-band processing, inputs, targets and collation |
-| [losses.py](src/fogcast/residual_unet_fogcast/losses.py) | Fine/native supervision, pooling, BCE and Brier statistics |
-| [sources.py](src/fogcast/residual_unet_fogcast/sources.py) | NOAA discovery, downloads, projection and GRIB decoding |
-| [forecast.py](src/fogcast/residual_unet_fogcast/forecast.py) | Three-member loading, prediction, output files and CLI |
