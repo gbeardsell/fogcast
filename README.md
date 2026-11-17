@@ -158,7 +158,7 @@ Model I3 ensemble has the lowest Brier score at every forecast hour, day and nig
 | Persistence | 0.2183 | 0.2084 | — |
 | Climatology | 0.2046 | 0.2103 | — |
 | NBM | 0.1156 | 0.1332 | 0 |
-| Model I3 | **0.0899** | **0.1057** | **+22.2% / +20.6%** |
+| Model I3 | **0.0899** | **0.1057** | **0.222 / +0.206** |
 
 Scores average the +1 to +10 hour Brier scores equally. Brier skill score is
 `1 - Brier / Brier_NBM`, expressed as a percentage; higher is better. See the
