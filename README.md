@@ -82,7 +82,7 @@ Results are saved under `outputs/historical/` or `outputs/current/`, depending
 on the example. Probabilities describe clear versus cloudy conditions; the
 model does not separately identify fog types.
 
-in the PNG, a pixel is clear when its
+In the PNG, a pixel is clear when its
 predicted clear-sky probability is at least 50%. The NPZ retains the original continuous probabilities.
 The small map backgrounds are included in the installed package, so rendering
 requires no map downloads.
@@ -145,7 +145,7 @@ frozen; running an example performs no fitting.
 
 Satellite scans must have completed and been created by the issue time, with a
 midpoint no more than 20 minutes earlier.
-NBM inputs uses one complete cycle initialized 2–4 hours before the issue time.
+NBM inputs use one complete cycle initialized 2–4 hours before the issue time.
 
 ## Run the tests
 
@@ -171,11 +171,11 @@ Five source modules contain the implementation:
 
 | File | Purpose |
 | --- | --- |
-| [model.py](src/fogcast/residual_unet_fogcast/model.py) | Residual U-Net architecture and central output crop |
-| [dataset.py](src/fogcast/residual_unet_fogcast/dataset.py) | Solar geometry, visible-band processing, inputs, targets and collation |
-| [losses.py](src/fogcast/residual_unet_fogcast/losses.py) | Fine/native supervision, pooling, BCE and Brier statistics |
-| [sources.py](src/fogcast/residual_unet_fogcast/sources.py) | NOAA discovery, downloads, projection and GRIB decoding |
-| [forecast.py](src/fogcast/residual_unet_fogcast/forecast.py) | Three-member loading, prediction, output files and CLI |
+| [model.py](src/fogcast/model.py) | Residual U-Net architecture and central output crop |
+| [dataset.py](src/fogcast/dataset.py) | Solar geometry, visible-band processing, inputs, targets and collation |
+| [losses.py](src/fogcast/losses.py) | Fine/native supervision, pooling, BCE and Brier statistics |
+| [sources.py](src/fogcast/sources.py) | NOAA discovery, downloads, projection and GRIB decoding |
+| [forecast.py](src/fogcast/forecast.py) | Three-member loading, prediction, output files and CLI |
 
 
 ## Further reading
