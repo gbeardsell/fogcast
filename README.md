@@ -147,6 +147,24 @@ Satellite scans must have completed and been created by the issue time, with a
 midpoint no more than 20 minutes earlier.
 NBM inputs use one complete cycle initialized 2–4 hours before the issue time.
 
+
+## Results
+
+On 5,219 held-out test forecast issues spanning January 2023 to July 2026, the
+Model I3 ensemble has the lowest Brier score at every forecast hour, day and night.
+
+| Forecast | Day Brier | Night Brier | Brier Skill Score vs NBM (day/night) |
+| --- | ---: | ---: | ---: |
+| Persistence | 0.2183 | 0.2084 | — |
+| Climatology | 0.2046 | 0.2103 | — |
+| NBM | 0.1156 | 0.1332 | 0 |
+| Model I3 | **0.0899** | **0.1057** | **+22.2% / +20.6%** |
+
+Scores average the +1 to +10 hour Brier scores equally. Brier skill score is
+`1 - Brier / Brier_NBM`, expressed as a percentage; higher is better. See the
+[detailed evaluation](https://gbeardsell.com/writing/does-fogcast-earn-its-detail/)
+for the scoring method and comparisons by forecast hour.
+
 ## Run the tests
 
 Install the test dependencies and run the checks from the package folder:
